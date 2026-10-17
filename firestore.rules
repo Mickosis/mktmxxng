@@ -1,0 +1,98 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function memberPath() {
+      return /databases/$(database)/documents/members/$(myEmail());
+    }
+
+    function isMember() {
+      return signedIn() && exists(memberPath());
+    }
+
+    function isAdmin() {
+      return isMember() && get(memberPath()).data.role == 'admin';
+    }
+
+    function bootstrapPath() {
+      return /databases/$(database)/documents/config/bootstrap;
+    }
+
+    function validCafe(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.tags is list && d.tags.size() <= 20
+        && d.area is string && d.area.size() > 0 && d.area.size() <= 80
+        && d.price is int && d.price >= 0 && d.price <= 3
+        && d.visitCount is int && d.visitCount >= 0
+        && d.ratingSum is number && d.ratingSum >= 0
+        && d.raters is map;
+    }
+
+    function validVisit(d) {
+      return d.uid == request.auth.uid
+        && d.rating is int && d.rating >= 1 && d.rating <= 5
+        && d.date is string
+        && d.items is list && d.items.size() <= 30;
+    }
+
+    // Anyone can browse and roll.
+    match /cafes/{cafeId} {
+      allow read: if true;
+      allow create: if isMember() && validCafe(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && validCafe(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if isAdmin();
+
+      match /visits/{visitId} {
+        allow read: if true;
+        allow create: if isMember() && validVisit(request.resource.data);
+        allow update: if isMember() && resource.data.uid == request.auth.uid
+          && validVisit(request.resource.data);
+        // Admin may delete any visit so a cafe delete can clean up.
+        allow delete: if isMember() && (resource.data.uid == request.auth.uid || isAdmin());
+      }
+    }
+
+    match /taxonomy/{docId} {
+      allow read: if true;
+      allow write: if isMember() && docId in ['tags', 'areas']
+        && request.resource.data.list is list
+        && request.resource.data.list.size() <= 500;
+    }
+
+    match /config/bootstrap {
+      allow read: if true;
+      // One-time admin claim: only while unclaimed, and only together with
+      // creating your own admin member doc in the same batch.
+      allow create: if signedIn() && !exists(bootstrapPath())
+        && request.resource.data.uid == request.auth.uid
+        && existsAfter(memberPath())
+        && getAfter(memberPath()).data.role == 'admin';
+      allow update, delete: if false;
+    }
+
+    match /members/{email} {
+      allow read: if signedIn() && (email == myEmail() || isMember());
+      allow create: if (isAdmin() && request.resource.data.role in ['admin', 'member'])
+        || (signedIn() && email == myEmail()
+            && !exists(bootstrapPath())
+            && existsAfter(bootstrapPath())
+            && request.resource.data.role == 'admin');
+      allow update: if isAdmin() && request.resource.data.role in ['admin', 'member'];
+      // Admins cannot remove themselves, so the app never ends up admin-less.
+      allow delete: if isAdmin() && email != myEmail();
+    }
+  }
+}
