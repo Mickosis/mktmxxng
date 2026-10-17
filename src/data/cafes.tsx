@@ -86,6 +86,7 @@ function clean(input: CafeInput): CafeInput {
     notes: input.notes.trim(),
     work: input.work,
     links: [...new Set(input.links.map((l) => l.trim()).filter(isHttpUrl))].slice(0, 10),
+    petFriendly: input.petFriendly,
   }
 }
 

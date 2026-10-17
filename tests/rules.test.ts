@@ -167,6 +167,11 @@ describe('with admin alice and member bob', () => {
     await assertFails(updateDoc(doc(alice(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'x' }))
   })
 
+  it('pet-friendly must be a boolean', async () => {
+    await assertSucceeds(setDoc(doc(bob(), 'cafes', 'p1'), { ...cafe('bob'), petFriendly: true }))
+    await assertFails(setDoc(doc(bob(), 'cafes', 'p2'), { ...cafe('bob'), petFriendly: 'yes' }))
+  })
+
   it('taxonomy is limited to tags and areas', async () => {
     await assertSucceeds(setDoc(doc(bob(), 'taxonomy', 'tags'), { list: ['coffee', 'brunch'] }))
     await assertFails(setDoc(doc(bob(), 'taxonomy', 'other'), { list: [] }))

@@ -25,6 +25,8 @@ export type Cafe = {
   work: Work
   /** TikTok, IG Reels, YouTube etc. Older cafes may not have it. */
   links?: string[]
+  /** Missing on older cafes, which counts as not pet-friendly. */
+  petFriendly?: boolean
   visitCount: number
   ratingSum: number
   /** uid -> number of visits logged by that person */
@@ -34,7 +36,10 @@ export type Cafe = {
   updatedAt?: Timestamp
 }
 
-export type CafeInput = Pick<Cafe, 'name' | 'tags' | 'area' | 'address' | 'mapsUrl' | 'price' | 'notes' | 'work'> & { links: string[] }
+export type CafeInput = Pick<Cafe, 'name' | 'tags' | 'area' | 'address' | 'mapsUrl' | 'price' | 'notes' | 'work'> & {
+  links: string[]
+  petFriendly: boolean
+}
 
 export type OrderItem = { name: string; rating?: number }
 
@@ -67,6 +72,12 @@ export function average(c: Pick<Cafe, 'visitCount' | 'ratingSum'>): number | nul
 
 export function pesos(price: number): string {
   return price > 0 ? '₱'.repeat(price) : ''
+}
+
+/** The short facts line on tickets and cafe pages: price, work flags, pets. */
+export function perks(c: Pick<Cafe, 'price' | 'work' | 'petFriendly'>): string[] {
+  const work = (Object.keys(WORK_LABELS) as WorkFlag[]).filter((w) => c.work?.[w]).map((w) => WORK_LABELS[w])
+  return [pesos(c.price), ...work, c.petFriendly ? 'Pet-friendly' : ''].filter(Boolean)
 }
 
 export function mapsLink(c: Pick<Cafe, 'mapsUrl' | 'name' | 'address' | 'area'>): string {

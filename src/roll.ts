@@ -9,13 +9,14 @@ export type Filters = {
   price: number
   status: Status
   work: WorkFlag[]
+  pets: boolean
   mine: boolean
 }
 
-export const EMPTY_FILTERS: Filters = { tags: [], area: '', price: 0, status: 'any', work: [], mine: false }
+export const EMPTY_FILTERS: Filters = { tags: [], area: '', price: 0, status: 'any', work: [], pets: false, mine: false }
 
 export function activeFilterCount(f: Filters): number {
-  return f.tags.length + (f.area ? 1 : 0) + (f.price ? 1 : 0) + (f.status !== 'any' ? 1 : 0) + f.work.length + (f.mine ? 1 : 0)
+  return f.tags.length + (f.area ? 1 : 0) + (f.price ? 1 : 0) + (f.status !== 'any' ? 1 : 0) + f.work.length + (f.pets ? 1 : 0) + (f.mine ? 1 : 0)
 }
 
 export function matches(c: Cafe, f: Filters, uid: string | undefined): boolean {
@@ -26,6 +27,7 @@ export function matches(c: Cafe, f: Filters, uid: string | undefined): boolean {
   if (f.status === 'new' && c.visitCount > 0) return false
   if (f.status === 'been' && c.visitCount === 0) return false
   if (f.work.some((w) => !c.work?.[w])) return false
+  if (f.pets && !c.petFriendly) return false
   if (f.mine && !(uid && (c.raters?.[uid] ?? 0) > 0)) return false
   return true
 }

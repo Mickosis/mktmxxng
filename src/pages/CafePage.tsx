@@ -8,7 +8,7 @@ import { Stamp } from '../components/Stamp'
 import { Stars } from '../components/Stars'
 import { deleteCafe, useCafes } from '../data/cafes'
 import { deleteVisit, itemMemory, useVisits } from '../data/visits'
-import { average, mapsLink, pesos, WORK_LABELS, type WorkFlag } from '../types'
+import { average, mapsLink, perks } from '../types'
 
 const dateFmt = new Intl.DateTimeFormat('en-PH', { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -47,7 +47,7 @@ export function CafePage() {
     )
   }
 
-  const work = (Object.keys(WORK_LABELS) as WorkFlag[]).filter((w) => cafe.work?.[w])
+  const facts = perks(cafe)
 
   return (
     <>
@@ -59,9 +59,7 @@ export function CafePage() {
             {cafe.tags.map((t) => <Stamp key={t} label={t} size="sm" />)}
           </div>
         )}
-        {(cafe.price > 0 || work.length > 0) && (
-          <p className="ticket-sub">{[pesos(cafe.price), ...work.map((w) => WORK_LABELS[w])].filter(Boolean).join('  ')}</p>
-        )}
+        {facts.length > 0 && <p className="ticket-sub">{facts.join('  ')}</p>}
         {cafe.notes && <p className="ticket-note">{cafe.notes}</p>}
         <SocialLinks links={cafe.links} />
 

@@ -37,7 +37,8 @@ service cloud.firestore {
         && d.visitCount is int && d.visitCount >= 0
         && d.ratingSum is number && d.ratingSum >= 0
         && d.raters is map
-        && (!('links' in d) || (d.links is list && d.links.size() <= 10));
+        && (!('links' in d) || (d.links is list && d.links.size() <= 10))
+        && (!('petFriendly' in d) || d.petFriendly is bool);
     }
 
     function validVisit(d) {

@@ -16,6 +16,7 @@ const BLANK: CafeInput = {
   notes: '',
   work: { wifi: false, outlets: false, laptop: false },
   links: [],
+  petFriendly: false,
 }
 
 const PRICES = [
@@ -51,6 +52,7 @@ function CafeFormInner({ id }: { id?: string }) {
           notes: existing.notes,
           work: { ...BLANK.work, ...existing.work },
           links: existing.links ?? [],
+          petFriendly: existing.petFriendly ?? false,
         }
       : BLANK,
   )
@@ -260,6 +262,16 @@ function CafeFormInner({ id }: { id?: string }) {
                 <span>{WORK_LABELS[w]}</span>
               </label>
             ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Pets</legend>
+          <div className="checks">
+            <label className="check">
+              <input type="checkbox" checked={form.petFriendly} onChange={(e) => set({ petFriendly: e.target.checked })} />
+              <span>Pet-friendly</span>
+            </label>
           </div>
         </fieldset>
 

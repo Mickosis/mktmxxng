@@ -80,6 +80,16 @@ export function FilterPanel({ filters, onChange }: Props) {
               <span>{WORK_LABELS[w]}</span>
             </label>
           ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Anything else?</legend>
+        <div className="checks">
+          <label className="check">
+            <input type="checkbox" checked={filters.pets} onChange={(e) => set({ pets: e.target.checked })} />
+            <span>Pet-friendly</span>
+          </label>
           {user && (
             <label className="check">
               <input type="checkbox" checked={filters.mine} onChange={(e) => set({ mine: e.target.checked })} />

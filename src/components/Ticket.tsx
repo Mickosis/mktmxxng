@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { itemMemory, useVisits } from '../data/visits'
-import { average, mapsLink, pesos, WORK_LABELS, type Cafe, type WorkFlag } from '../types'
+import { average, mapsLink, perks, type Cafe } from '../types'
 import { SocialLinks } from './SocialLinks'
 import { Stamp } from './Stamp'
 import { Stars } from './Stars'
@@ -16,7 +16,7 @@ export function Ticket({ cafe, orderNo, printedAt }: Props) {
   const { visits } = useVisits(cafe.id)
   const usual = itemMemory(visits).slice(0, 4)
   const avg = average(cafe)
-  const work = (Object.keys(WORK_LABELS) as WorkFlag[]).filter((w) => cafe.work?.[w])
+  const facts = perks(cafe)
 
   return (
     <article className="ticket" aria-live="polite" aria-label={`Your pick: ${cafe.name}`}>
@@ -70,11 +70,7 @@ export function Ticket({ cafe, orderNo, printedAt }: Props) {
       <p className="ticket-sub">
         {cafe.visitCount > 0 ? `${cafe.visitCount} visit${cafe.visitCount === 1 ? '' : 's'} logged` : 'Want to try. Nobody has been yet.'}
       </p>
-      {(cafe.price > 0 || work.length > 0) && (
-        <p className="ticket-sub">
-          {[pesos(cafe.price), ...work.map((w) => WORK_LABELS[w])].filter(Boolean).join('  ')}
-        </p>
-      )}
+      {facts.length > 0 && <p className="ticket-sub">{facts.join('  ')}</p>}
       {cafe.notes && <p className="ticket-note">{cafe.notes}</p>}
       <SocialLinks links={cafe.links} />
 
