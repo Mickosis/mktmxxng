@@ -1,6 +1,6 @@
-// Reads the caption of a TikTok, Instagram or Facebook post, or the name and bio of a profile,
-// for the MKTMXXNG add-cafe form. Only answers the app's own origins and only fetches those
-// three sites, so it isn't an open proxy.
+// Reads the caption of a TikTok, Instagram or Facebook post, the name and bio of a profile, or
+// where a Google/Apple Maps pin is, for the MKTMXXNG add-cafe form. Only answers the app's own
+// origins and only fetches those sites (plus OpenStreetMap's geocoder), so it isn't an open proxy.
 
 const ORIGINS = ['https://mickosis.github.io', 'http://localhost:5199']
 
@@ -54,6 +54,70 @@ function isProfile(platform: Platform, url: URL): boolean {
   if (parts[0] === 'profile.php') return url.searchParams.has('id')
   if (parts[0] === 'people') return parts.length >= 2
   return parts.length === 1 && !FB_RESERVED.has(parts[0].toLowerCase())
+}
+
+// Maps share links are short redirects; only these hosts are followed.
+const MAPS_SHORT = new Set(['maps.app.goo.gl', 'goo.gl', 'maps.apple'])
+const MAPS_FULL = /^(www\.)?google\.[a-z.]+$|^maps\.google\.[a-z.]+$|^maps\.apple\.com$|^maps\.apple$/
+const GEOCODER_UA = 'mktmxxng-preview/1.0 (https://github.com/Mickosis/mktmxxng)'
+
+function isMapsHost(url: URL): boolean {
+  return url.protocol === 'https:' && (MAPS_SHORT.has(url.hostname) || MAPS_FULL.test(url.hostname))
+}
+
+type Place = {
+  url: string
+  lat: number | null
+  lng: number | null
+  /** House number and street, from OpenStreetMap. */
+  street: string | null
+  /** Village or district, e.g. Legazpi Village or Poblacion. */
+  area: string | null
+  city: string | null
+}
+
+/** Follows a Maps short link to the full place URL, which carries the name and the pin. */
+async function resolveMaps(url: URL): Promise<URL> {
+  let current = url
+  for (let hop = 0; hop < 5; hop++) {
+    if (!MAPS_SHORT.has(current.hostname)) break
+    const res = await fetch(current.toString(), { redirect: 'manual', headers: { 'User-Agent': BROWSER_UA } })
+    const next = res.headers.get('Location')
+    if (res.status < 300 || res.status >= 400 || !next) break
+    const target = new URL(next, current)
+    if (!isMapsHost(target)) break
+    current = target
+  }
+  return current
+}
+
+/** The pin's coordinates: Google's !3d…!4d… (the place itself) beats @lat,lng (the map's centre). */
+function coordsOf(url: URL): [number, number] | null {
+  const text = decodeURIComponent(url.toString())
+  const m =
+    text.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) ??
+    text.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) ??
+    text.match(/[?&](?:ll|coordinate|q|query)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/)
+  return m ? [Number(m[1]), Number(m[2])] : null
+}
+
+/** Street and village for a pin, from OpenStreetMap's free reverse geocoder. */
+async function reverseGeocode(lat: number, lng: number): Promise<Pick<Place, 'street' | 'area' | 'city'>> {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+    { headers: { 'User-Agent': GEOCODER_UA } },
+  )
+  if (!res.ok) return { street: null, area: null, city: null }
+  const { address: a = {} } = (await res.json()) as { address?: Record<string, string> }
+  const street = [a.house_number, a.road].filter(Boolean).join(' ') || null
+  return { street, area: a.neighbourhood || a.quarter || a.suburb || null, city: a.city || a.town || null }
+}
+
+async function place(url: URL): Promise<Place> {
+  const full = await resolveMaps(url)
+  const coords = coordsOf(full)
+  const found = coords ? await reverseGeocode(...coords) : { street: null, area: null, city: null }
+  return { url: full.toString(), lat: coords?.[0] ?? null, lng: coords?.[1] ?? null, ...found }
 }
 
 function cors(origin: string | null): Record<string, string> {
@@ -186,6 +250,28 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) })
 
     const { pathname, searchParams } = new URL(request.url)
+    if (request.method === 'GET' && pathname === '/place') {
+      let target: URL
+      try {
+        target = new URL(searchParams.get('url') ?? '')
+      } catch {
+        return json({ error: 'Pass a full https:// link.' }, 400, origin)
+      }
+      if (!isMapsHost(target)) return json({ error: 'Only Google Maps and Apple Maps links are supported.' }, 400, origin)
+      // Places don't move, so cache longer; this also keeps us well inside OpenStreetMap's rate limit.
+      const key = new Request(`https://preview.cache/place/${encodeURIComponent(target.toString())}`)
+      const hit = await caches.default.match(key)
+      if (hit) return new Response(await hit.text(), { headers: { 'Content-Type': 'application/json', ...cors(origin) } })
+      try {
+        const found = await place(target)
+        if (found.lat != null) {
+          ctx.waitUntil(caches.default.put(key, new Response(JSON.stringify(found), { headers: { 'Cache-Control': 'max-age=2592000' } })))
+        }
+        return json(found, 200, origin, found.lat != null)
+      } catch {
+        return json({ url: target.toString(), lat: null, lng: null, street: null, area: null, city: null }, 200, origin)
+      }
+    }
     if (request.method !== 'GET' || pathname !== '/preview') return json({ error: 'Not found' }, 404, origin)
 
     let target: URL

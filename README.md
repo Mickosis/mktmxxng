@@ -35,7 +35,7 @@ The rules deploy needs a `FIREBASE_SERVICE_ACCOUNT` repo secret holding a JSON k
 
 ## Caption helper (Cloudflare Worker)
 
-"Start from a link" on the Add cafe page reads TikTok, Instagram and Facebook captions, or the name and bio of a profile, to pre-fill the form. Full TikTok post and profile links work straight from the browser. Short TikTok links (`vm.tiktok.com`, `tiktok.com/t/`) and best-effort Instagram/Facebook previews go through a small Cloudflare Worker in `worker/` (free plan).
+"Start from a link" on the Add cafe page reads TikTok, Instagram and Facebook captions, or the name and bio of a profile, to pre-fill the form. Google Maps and Apple Maps links fill in the name from the URL, pin the cafe to that place, and (through the Worker) look up the street and area for the pin with OpenStreetMap's free Nominatim geocoder. Full TikTok post and profile links work straight from the browser. Short TikTok links (`vm.tiktok.com`, `tiktok.com/t/`) and best-effort Instagram/Facebook previews go through a small Cloudflare Worker in `worker/` (free plan).
 
 ```sh
 cd worker

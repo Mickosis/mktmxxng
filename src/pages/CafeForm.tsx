@@ -131,8 +131,7 @@ function CafeFormInner({ id }: { id?: string }) {
       setError('Paste the full link, starting with https://')
       return
     }
-    // The Maps link is always built from name + address now.
-    const input = { ...form, mapsUrl: '', links: pending ? [...form.links, pending] : form.links }
+    const input = { ...form, links: pending ? [...form.links, pending] : form.links }
     setSaving(true)
     setError(null)
     try {
@@ -148,7 +147,7 @@ function CafeFormInner({ id }: { id?: string }) {
     <Slip>
       <form onSubmit={submit} className="form">
         <h1>{existing ? `Edit ${existing.name}` : 'Add a cafe'}</h1>
-        {!existing && <QuickAdd onPrefill={applyPrefill} onLink={attachLink} />}
+        {!existing && <QuickAdd onPrefill={applyPrefill} onLink={attachLink} onMapsUrl={(url) => setForm((f) => ({ ...f, mapsUrl: url }))} />}
 
         <label className="field">
           <span>Name</span>
@@ -249,7 +248,13 @@ function CafeFormInner({ id }: { id?: string }) {
           <span>Address <span className="muted">(optional)</span></span>
           <input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Street, building" autoComplete="off" />
         </label>
-        {form.name.trim() && (
+        {form.mapsUrl ? (
+          <p className="small muted">
+            Open in Maps goes to the pin you pasted.{' '}
+            <a href={form.mapsUrl} target="_blank" rel="noreferrer">Check the pin</a>{' '}
+            <button type="button" className="link-btn" onClick={() => set({ mapsUrl: '' })}>Remove pin</button>
+          </p>
+        ) : form.name.trim() && (
           <p className="small muted">
             Open in Maps searches for this name and address in Makati.{' '}
             <a href={mapsLink({ name: form.name.trim(), address: form.address.trim(), area: form.area.trim(), mapsUrl: '' })} target="_blank" rel="noreferrer">

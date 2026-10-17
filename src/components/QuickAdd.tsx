@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCafes } from '../data/cafes'
 import { nameFromHandle, parseCaption, profileName, type Prefill } from '../prefill/parse'
 import { cleanLink, fetchPreview, findUrl, handleOf, isProfile, platformOf, PLATFORM_NAMES, sameLink, type Preview } from '../prefill/preview'
+import { cleanMapsLink, fetchPlace, isMapsLink, placePrefill } from '../prefill/maps'
 import type { Cafe } from '../types'
 
 type Props = {
@@ -10,12 +11,15 @@ type Props = {
   onPrefill: (p: Prefill) => string[]
   /** Add a link to the form, optionally replacing an earlier one (a short link once it's resolved). */
   onLink: (url: string, replaces?: string) => void
+  /** Pin the cafe to a pasted Google/Apple Maps link. */
+  onMapsUrl: (url: string) => void
 }
 
 type State =
   | { step: 'idle' }
   | { step: 'reading'; url: string }
   | { step: 'done'; preview: Preview | null; filled: string[]; mentions: string[] }
+  | { step: 'place'; filled: string[] }
   | { step: 'caption'; url: string; filled: string[] }
   | { step: 'duplicate'; cafe: Cafe; url: string }
   | { step: 'error'; message: string }
@@ -24,8 +28,22 @@ function listOf(items: string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
-/** "Start from a link": paste a TikTok/IG/FB post or profile link (or its caption) and pre-fill the form. */
-export function QuickAdd({ onPrefill, onLink }: Props) {
+/** Maps links differ only in tracking params (g_st, entry, g_ep…) for the same pin. */
+function sameMapsLink(a: string, b: string) {
+  const norm = (u: string) => {
+    try {
+      const x = new URL(u)
+      const q = x.searchParams.get('q') ?? x.searchParams.get('query') ?? ''
+      return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}?${q}`.toLowerCase()
+    } catch {
+      return u
+    }
+  }
+  return norm(a) === norm(b)
+}
+
+/** "Start from a link": paste a TikTok/IG/FB post or profile link, a Maps link, or a caption, and pre-fill the form. */
+export function QuickAdd({ onPrefill, onLink, onMapsUrl }: Props) {
   const { cafes, tags, areas } = useCafes()
   const [state, setState] = useState<State>({ step: 'idle' })
   const [text, setText] = useState('')
@@ -39,6 +57,20 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
     setState({ step: 'done', preview, filled, mentions: parsed.mentions })
   }
 
+  async function fromMaps(link: string) {
+    const url = cleanMapsLink(link)
+    const dupe = cafes.find((c) => c.mapsUrl && sameMapsLink(c.mapsUrl, url))
+    if (dupe) {
+      setState({ step: 'duplicate', cafe: dupe, url })
+      return
+    }
+    onMapsUrl(url)
+    setState({ step: 'reading', url })
+    const place = await fetchPlace(url)
+    const filled = onPrefill(placePrefill(url, place, { tags, areas }))
+    setState({ step: 'place', filled })
+  }
+
   async function handle(raw: string) {
     const input = raw.trim()
     if (!input) return
@@ -49,8 +81,12 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
       fromCaption(input, null)
       return
     }
+    if (isMapsLink(found)) {
+      await fromMaps(found)
+      return
+    }
     if (!platformOf(url)) {
-      setState({ step: 'error', message: 'That link isn\'t from TikTok, Instagram or Facebook. Add it under Social media below instead.' })
+      setState({ step: 'error', message: 'That link isn\'t from TikTok, Instagram, Facebook or Maps. Add it under Social media below instead.' })
       return
     }
     const dupe = cafes.find((c) => c.links?.some((l) => sameLink(l, url)))
@@ -105,7 +141,7 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
   return (
     <section className="quick-add" aria-labelledby="quick-add-title">
       <h2 id="quick-add-title">Start from a link</h2>
-      <p className="muted small">Copy a link to a TikTok, Instagram or Facebook post or profile, then tap Paste. We'll fill in what the caption or bio says.</p>
+      <p className="muted small">Copy a link to a TikTok, Instagram or Facebook post or profile, or a Google Maps place, then tap Paste. We'll fill in what we can.</p>
       <div className="row">
         <button type="button" className="btn btn-ink" onClick={pasteFromClipboard} disabled={state.step === 'reading'}>
           Paste link
@@ -131,7 +167,15 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
       </div>
 
       <div aria-live="polite">
-        {state.step === 'reading' && <p className="quick-status printing">{isProfile(state.url) ? 'Reading the profile' : 'Reading the post'}</p>}
+        {state.step === 'reading' && <p className="quick-status printing">{isMapsLink(state.url) ? 'Finding the place' : isProfile(state.url) ? 'Reading the profile' : 'Reading the post'}</p>}
+
+        {state.step === 'place' && (
+          <p className="quick-status">
+            {state.filled.length
+              ? `Filled in ${listOf(state.filled)} from the Maps pin. Check the details below.`
+              : 'Saved the Maps pin. Fill in the details below.'}
+          </p>
+        )}
 
         {state.step === 'done' && (
           <div className="quick-status">
@@ -186,7 +230,7 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
 
         {state.step === 'duplicate' && (
           <p className="quick-status warn">
-            This {isProfile(state.url) ? 'profile' : 'post'} is already on file under <Link to={`/cafe/${state.cafe.id}`}>{state.cafe.name}</Link>.
+            This {isMapsLink(state.url) ? 'place' : isProfile(state.url) ? 'profile' : 'post'} is already on file under <Link to={`/cafe/${state.cafe.id}`}>{state.cafe.name}</Link>.
           </p>
         )}
 

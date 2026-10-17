@@ -70,7 +70,8 @@ function inHashtag(text: string, word: string): boolean {
   return (text.match(/#[\p{L}\p{N}_]+/gu) ?? []).some((h) => h.toLowerCase().includes(needle))
 }
 
-function findArea(text: string, known: string[]): string | undefined {
+/** The Makati area a piece of text mentions, spelled the way the list already spells it. */
+export function findArea(text: string, known: string[]): string | undefined {
   // Areas already on file win, so the caption maps onto the spelling the list uses.
   for (const a of known) if (has(text, a)) return a
   for (const [canonical, aliases] of MAKATI_AREAS) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
 import { cleanLink, handleOf, isProfile, sameLink } from '../src/prefill/preview'
 import { publicName, shortName } from '../src/types'
+import { cleanMapsLink, isMapsLink, placeFromUrl, placePrefill } from '../src/prefill/maps'
 
 const opts = { tags: ['coffee', 'matcha', 'pastries', 'restaurant', 'brunch'], areas: ['Legazpi Village', 'Poblacion'] }
 
@@ -109,5 +110,40 @@ describe('public names', () => {
     expect(shortName('mico')).toBe('mico')
     expect(publicName('Mico Rigunay', true)).toBe('Mico Rigunay')
     expect(publicName('Mico Rigunay', false)).toBe('Mico R.')
+  })
+})
+
+describe('maps links', () => {
+  it('recognises Google and Apple Maps links', () => {
+    expect(isMapsLink('https://maps.app.goo.gl/aQ3QfvDTvNdZ2gWo8?g_st=ic')).toBe(true)
+    expect(isMapsLink('https://www.google.com/maps/place/Kumo+Coffee/@14.55,121.01,17z')).toBe(true)
+    expect(isMapsLink('https://www.google.com.ph/maps/place/Kumo')).toBe(true)
+    expect(isMapsLink('https://maps.apple.com/?q=Kumo&ll=14.5,121.0')).toBe(true)
+    expect(isMapsLink('https://www.google.com/search?q=kumo')).toBe(false)
+    expect(isMapsLink('https://www.tiktok.com/@kumo')).toBe(false)
+  })
+
+  it('drops tracking params but keeps the place', () => {
+    expect(cleanMapsLink('https://maps.app.goo.gl/aQ3QfvDTvNdZ2gWo8?g_st=ic')).toBe('https://maps.app.goo.gl/aQ3QfvDTvNdZ2gWo8')
+    expect(cleanMapsLink('https://www.google.com/maps/place/Kumo/@1,2,17z/data=!3d1!4d2?entry=ttu&g_ep=abc')).toBe('https://www.google.com/maps/place/Kumo/@1,2,17z/data=!3d1!4d2')
+    expect(cleanMapsLink('https://maps.google.com/?q=Kumo&ftid=0x1&utm_source=x')).toBe('https://maps.google.com/?q=Kumo&ftid=0x1')
+  })
+
+  it('reads name and address from the URL', () => {
+    expect(placeFromUrl('https://www.google.com/maps/place/Toby%27s+Estate+Salcedo/@14.56,121.02,17z/data=!3d14.5!4d121.0')).toEqual({ name: "Toby's Estate Salcedo", address: undefined })
+    expect(placeFromUrl('https://maps.google.com/?q=Kumo+Coffee,+123+Herrera+St,+Legazpi+Village,+Makati,+1229+Metro+Manila,+Philippines&ftid=0x1')).toEqual({ name: 'Kumo Coffee', address: '123 Herrera St, Legazpi Village' })
+    expect(placeFromUrl('https://maps.apple.com/?address=5365+General+Luna+St,+Makati,+Philippines&ll=14.56,121.03&q=Kumo')).toEqual({ name: 'Kumo', address: '5365 General Luna St' })
+    expect(placeFromUrl('https://www.google.com/maps/search/?api=1&query=14.55,121.02')).toEqual({})
+  })
+
+  it('fills area and street from the pin when the URL has only a name', () => {
+    const p = placePrefill(
+      'https://maps.app.goo.gl/x',
+      { url: 'https://www.google.com/maps/place/Kumo+Coffee/@14.5547,121.0177,17z', lat: 14.5547, lng: 121.0177, street: 'Rada Street', area: 'Legazpi Village', city: 'Makati' },
+      opts,
+    )
+    expect(p).toMatchObject({ name: 'Kumo Coffee', address: 'Rada Street', area: 'Legazpi Village', tags: ['coffee'] })
+    // Without the helper, the URL alone still gives the name.
+    expect(placePrefill('https://www.google.com/maps/place/Matcha+Saru/@1,2,17z', null, opts)).toMatchObject({ name: 'Matcha Saru', tags: ['matcha'] })
   })
 })
