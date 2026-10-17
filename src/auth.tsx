@@ -9,9 +9,10 @@ import {
   type User,
 } from 'firebase/auth'
 import { doc, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { auth, db } from './firebase'
-import type { Member } from './types'
+import { saveProfile, type Profile } from './data/profiles'
+import { publicName, type Member } from './types'
 import { storage } from './storage'
 
 const EMAIL_KEY = 'mk.emailForSignIn'
@@ -26,7 +27,12 @@ type AuthState = {
   bootstrapped: boolean | null
   /** set when the page was opened from an email link on a device that doesn't know the email */
   pendingLink: string | null
+  /** Your full name as you entered it (or as Google has it). Only members see it. */
   displayName: string
+  /** What everyone else sees: your chosen name, or your first name and last initial. */
+  publicName: string
+  /** True once you saved a name yourself. */
+  nameSet: boolean
   signInWithGoogle: () => Promise<void>
   sendEmailLink: (email: string) => Promise<void>
   completeEmailLink: (email: string) => Promise<void>
@@ -85,6 +91,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [email])
   const member = email && memberState?.email === email ? memberState.member : null
 
+  // Your own public name card; undefined while loading, null when it doesn't exist yet.
+  const uid = user?.uid ?? null
+  const [profileState, setProfileState] = useState<{ uid: string; profile: Profile | null } | null>(null)
+  useEffect(() => {
+    if (!uid) return
+    return onSnapshot(
+      doc(db, 'profiles', uid),
+      (snap) => setProfileState({ uid, profile: snap.exists() ? ({ uid, ...snap.data() } as Profile) : null }),
+      () => setProfileState(null),
+    )
+  }, [uid])
+  const profile = uid && profileState?.uid === uid ? profileState.profile : undefined
+
+  const fullName = member?.displayName || user?.displayName || email?.split('@')[0] || ''
+  // Before profiles existed, a member name that differs from Google's means they renamed themselves.
+  const nameSet = profile?.nameSet ?? (!!member?.displayName && !!user?.displayName && member.displayName !== user.displayName)
+
+  // Members get a name card the first time they open the app; this also shortens names on older visits.
+  const publishing = useRef(false)
+  useEffect(() => {
+    if (!user || !member || profile !== null || publishing.current) return
+    publishing.current = true
+    saveProfile(user.uid, fullName, nameSet).catch(() => {}).finally(() => (publishing.current = false))
+  }, [user, member, profile, fullName, nameSet])
+
   const signInWithGoogle = useCallback(async () => {
     await signInWithPopup(auth, new GoogleAuthProvider())
   }, [])
@@ -124,13 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: member?.role === 'admin',
     bootstrapped,
     pendingLink,
-    displayName: member?.displayName || user?.displayName || email?.split('@')[0] || '',
+    displayName: fullName,
+    publicName: profile?.name ?? publicName(fullName, nameSet),
+    nameSet,
     signInWithGoogle,
     sendEmailLink,
     completeEmailLink,
     signOut,
     claimAdmin,
-  }), [user, loading, member, bootstrapped, pendingLink, email, signInWithGoogle, sendEmailLink, completeEmailLink, signOut, claimAdmin])
+  }), [user, loading, member, bootstrapped, pendingLink, fullName, profile, nameSet, signInWithGoogle, sendEmailLink, completeEmailLink, signOut, claimAdmin])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

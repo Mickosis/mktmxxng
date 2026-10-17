@@ -7,6 +7,7 @@ import { SocialLinks } from '../components/SocialLinks'
 import { Stamp } from '../components/Stamp'
 import { Stars } from '../components/Stars'
 import { deleteCafe, useCafes } from '../data/cafes'
+import { useNameOf } from '../data/profiles'
 import { deleteVisit, itemMemory, useVisits } from '../data/visits'
 import { average, mapsLink, perks } from '../types'
 
@@ -23,6 +24,7 @@ export function CafePage() {
   const { byId, loading } = useCafes()
   const { user, isMember, isAdmin } = useAuth()
   const { visits } = useVisits(id)
+  const nameOf = useNameOf()
   const [error, setError] = useState<string | null>(null)
   const cafe = byId(id)
 
@@ -30,13 +32,13 @@ export function CafePage() {
   const people = useMemo(() => {
     const map = new Map<string, { name: string; sum: number; n: number }>()
     for (const v of visits) {
-      const p = map.get(v.uid) ?? { name: v.displayName, sum: 0, n: 0 }
+      const p = map.get(v.uid) ?? { name: nameOf(v.uid, v.displayName), sum: 0, n: 0 }
       p.sum += v.rating
       p.n += 1
       map.set(v.uid, p)
     }
     return [...map.entries()].map(([uid, p]) => ({ uid, ...p })).sort((a, b) => b.n - a.n)
-  }, [visits])
+  }, [visits, nameOf])
 
   if (!cafe) {
     return (
@@ -48,6 +50,7 @@ export function CafePage() {
   }
 
   const facts = perks(cafe)
+  const addedBy = cafe.createdBy === user?.uid ? 'you' : nameOf(cafe.createdBy)
 
   return (
     <>
@@ -62,6 +65,11 @@ export function CafePage() {
         {facts.length > 0 && <p className="ticket-sub">{facts.join('  ')}</p>}
         {cafe.notes && <p className="ticket-note">{cafe.notes}</p>}
         <SocialLinks links={cafe.links} />
+        {addedBy && (
+          <p className="small muted">
+            Added by <Link to={`/people/${cafe.createdBy}`}>{addedBy}</Link>
+          </p>
+        )}
 
         <hr className="rule" />
         <div className="line total">
@@ -73,7 +81,7 @@ export function CafePage() {
           <ul className="lines">
             {people.map((p) => (
               <li key={p.uid} className="line">
-                <span className="line-name">{p.uid === user?.uid ? 'You' : p.name}</span>
+                <Link className="line-name" to={`/people/${p.uid}`}>{p.uid === user?.uid ? 'You' : p.name}</Link>
                 <span className="line-dots" aria-hidden="true" />
                 <span className="line-val"><Stars value={p.sum / p.n} count={p.n} /></span>
               </li>
@@ -113,7 +121,7 @@ export function CafePage() {
             {visits.map((v) => (
               <li key={v.id} className="visit">
                 <div className="visit-head">
-                  <span>{v.uid === user?.uid ? 'You' : v.displayName}</span>
+                  <Link to={`/people/${v.uid}`}>{v.uid === user?.uid ? 'You' : nameOf(v.uid, v.displayName)}</Link>
                   <span className="muted">{formatDate(v.date)}</span>
                 </div>
                 <Stars value={v.rating} />

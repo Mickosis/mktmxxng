@@ -23,7 +23,7 @@ export function VisitForm() {
 
 function VisitFormInner({ cafeId, visitId, visits }: { cafeId: string; visitId?: string; visits: Visit[] }) {
   const { byId } = useCafes()
-  const { user, isMember, displayName } = useAuth()
+  const { user, isMember, publicName } = useAuth()
   const navigate = useNavigate()
   const cafe = byId(cafeId)
   const existing = visitId ? visits.find((v) => v.id === visitId) : undefined
@@ -64,7 +64,7 @@ function VisitFormInner({ cafeId, visitId, visits }: { cafeId: string; visitId?:
     const input = { date, rating, items, note }
     try {
       if (existing) await updateVisit(cafe!.id, existing.id, input)
-      else await addVisit(cafe!.id, input, user!.uid, displayName)
+      else await addVisit(cafe!.id, input, user!.uid, publicName)
       navigate(`/cafe/${cafe!.id}`, { replace: true })
     } catch (err) {
       setError((err as Error).message)

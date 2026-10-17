@@ -117,3 +117,15 @@ export function isHttpUrl(url: string): boolean {
     return false
   }
 }
+
+/** "Mico Rigunay" becomes "Mico R." so a Google account's full name isn't published. */
+export function shortName(full: string): string {
+  const words = full.trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2) return full.trim()
+  const last = words[words.length - 1]
+  return `${words.slice(0, -1).join(' ')} ${last[0].toUpperCase()}.`
+}
+
+export function publicName(name: string, nameSet: boolean): string {
+  return nameSet ? name.trim() : shortName(name)
+}

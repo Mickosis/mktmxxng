@@ -112,6 +112,18 @@ service cloud.firestore {
             && getAfter(memberPath()).data.invite == token);
     }
 
+    // Public name cards, so everyone can see who added a cafe or logged a visit.
+    match /profiles/{uid} {
+      allow read: if true;
+      allow create, update: if isMember() && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['name', 'nameSet', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40
+        && request.resource.data.nameSet is bool;
+      allow delete: if isAdmin();
+    }
+
     match /members/{email} {
       allow read: if signedIn() && (email == myEmail() || isMember());
       allow create: if (isAdmin() && request.resource.data.role in ['admin', 'member'])

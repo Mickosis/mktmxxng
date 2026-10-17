@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
-import { renameSelf } from '../data/members'
+import { saveProfile } from '../data/profiles'
 
 export function message(err: unknown): string {
   const code = (err as { code?: string }).code ?? ''
@@ -130,7 +130,7 @@ export function SignInOptions() {
 }
 
 function RenameForm() {
-  const { user, displayName } = useAuth()
+  const { user, displayName, publicName, nameSet } = useAuth()
   const [name, setName] = useState(displayName)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
@@ -142,7 +142,7 @@ function RenameForm() {
     setBusy(true)
     setStatus(null)
     try {
-      await renameSelf(user.email.toLowerCase(), user.uid, trimmed)
+      await saveProfile(user.uid, trimmed, true, user.email.toLowerCase())
       setStatus({ ok: true, text: 'Name saved.' })
     } catch (err) {
       setStatus({ ok: false, text: (err as Error).message })
@@ -157,9 +157,12 @@ function RenameForm() {
         <span>Display name</span>
         <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} autoComplete="nickname" />
       </label>
-      <p className="muted small">Shown on your visits, including ones you already logged.</p>
+      <p className="muted small">
+        Shown on cafes you add and visits you log, including older ones.
+        {nameSet ? ` Others see “${publicName}”.` : ` Until you save a name, others see “${publicName}”.`}
+      </p>
       {status && <p className={status.ok ? 'ok' : 'error'} role={status.ok ? 'status' : 'alert'}>{status.text}</p>}
-      <button className="btn" disabled={busy || !trimmed || trimmed === displayName}>
+      <button className="btn" disabled={busy || !trimmed || (nameSet && trimmed === displayName)}>
         {busy ? 'Saving…' : 'Save name'}
       </button>
     </form>

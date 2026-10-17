@@ -4,12 +4,14 @@ import { AuthProvider, useAuth } from './auth'
 import { Shell, Slip } from './components/Shell'
 import { CafesProvider } from './data/cafes'
 import { PENDING_INVITE_KEY } from './data/invites'
+import { ProfilesProvider } from './data/profiles'
 import { storage } from './storage'
 import { CafeForm } from './pages/CafeForm'
 import { CafePage } from './pages/CafePage'
 import { JoinPage } from './pages/JoinPage'
 import { ListPage } from './pages/ListPage'
 import { MembersPage } from './pages/MembersPage'
+import { PeoplePage, PersonPage } from './pages/PeoplePage'
 import { RollPage } from './pages/RollPage'
 import { SignInPage } from './pages/SignInPage'
 import { VisitForm } from './pages/VisitForm'
@@ -40,25 +42,29 @@ export default function App() {
   return (
     <AuthProvider>
       <CafesProvider>
-        <HashRouter>
-          <ScrollTop />
-          <ResumeInvite />
-          <Shell>
-            <Routes>
-              <Route path="/" element={<RollPage />} />
-              <Route path="/list" element={<ListPage />} />
-              <Route path="/add" element={<CafeForm />} />
-              <Route path="/cafe/:id" element={<CafePage />} />
-              <Route path="/cafe/:id/edit" element={<CafeForm />} />
-              <Route path="/cafe/:id/visit" element={<VisitForm />} />
-              <Route path="/cafe/:id/visit/:visitId" element={<VisitForm />} />
-              <Route path="/members" element={<MembersPage />} />
-              <Route path="/signin" element={<SignInPage />} />
-              <Route path="/join/:token" element={<JoinPage />} />
-              <Route path="*" element={<Slip><p>Nothing printed at this address.</p></Slip>} />
-            </Routes>
-          </Shell>
-        </HashRouter>
+        <ProfilesProvider>
+          <HashRouter>
+            <ScrollTop />
+            <ResumeInvite />
+            <Shell>
+              <Routes>
+                <Route path="/" element={<RollPage />} />
+                <Route path="/list" element={<ListPage />} />
+                <Route path="/add" element={<CafeForm />} />
+                <Route path="/cafe/:id" element={<CafePage />} />
+                <Route path="/cafe/:id/edit" element={<CafeForm />} />
+                <Route path="/cafe/:id/visit" element={<VisitForm />} />
+                <Route path="/cafe/:id/visit/:visitId" element={<VisitForm />} />
+                <Route path="/members" element={<MembersPage />} />
+                <Route path="/people" element={<PeoplePage />} />
+                <Route path="/people/:uid" element={<PersonPage />} />
+                <Route path="/signin" element={<SignInPage />} />
+                <Route path="/join/:token" element={<JoinPage />} />
+                <Route path="*" element={<Slip><p>Nothing printed at this address.</p></Slip>} />
+              </Routes>
+            </Shell>
+          </HashRouter>
+        </ProfilesProvider>
       </CafesProvider>
     </AuthProvider>
   )

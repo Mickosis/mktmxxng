@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
 import { cleanLink, handleOf, isProfile, sameLink } from '../src/prefill/preview'
+import { publicName, shortName } from '../src/types'
 
 const opts = { tags: ['coffee', 'matcha', 'pastries', 'restaurant', 'brunch'], areas: ['Legazpi Village', 'Poblacion'] }
 
@@ -98,5 +99,15 @@ describe('profile links', () => {
     expect(cleanLink('https://www.instagram.com/kumo.coffee/?igsh=abc')).toBe('https://www.instagram.com/kumo.coffee/')
     expect(sameLink('https://instagram.com/kumo.coffee', 'https://www.instagram.com/kumo.coffee/?igsh=abc')).toBe(true)
     expect(sameLink('https://www.facebook.com/profile.php?id=1', 'https://www.facebook.com/profile.php?id=2')).toBe(false)
+  })
+})
+
+describe('public names', () => {
+  it('cuts the last name to an initial until a name is chosen', () => {
+    expect(shortName('Mico Rigunay')).toBe('Mico R.')
+    expect(shortName('Mary Ann santos')).toBe('Mary Ann S.')
+    expect(shortName('mico')).toBe('mico')
+    expect(publicName('Mico Rigunay', true)).toBe('Mico Rigunay')
+    expect(publicName('Mico Rigunay', false)).toBe('Mico R.')
   })
 })

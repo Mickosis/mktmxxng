@@ -9,6 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="topbar">
         <Link to="/" className="wordmark" aria-label="MKTMXXNG home">MKTMXXNG</Link>
         <nav className="topbar-links" aria-label="Account">
+          <NavLink to="/people">People</NavLink>
           {isAdmin && <NavLink to="/members">Members</NavLink>}
           <NavLink to="/signin">{user ? 'Account' : 'Sign in'}</NavLink>
         </nav>

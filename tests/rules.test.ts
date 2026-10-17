@@ -167,6 +167,20 @@ describe('with admin alice and member bob', () => {
     await assertFails(updateDoc(doc(alice(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'x' }))
   })
 
+  it('anyone reads name cards; members write only their own', async () => {
+    const card = { name: 'Bob B.', nameSet: false, updatedAt: serverTimestamp() }
+    await assertSucceeds(setDoc(doc(bob(), 'profiles', 'bob'), card))
+    await assertSucceeds(getDoc(doc(anon(), 'profiles', 'bob')))
+    await assertSucceeds(updateDoc(doc(bob(), 'profiles', 'bob'), { name: 'Bobby', nameSet: true }))
+    await assertFails(setDoc(doc(bob(), 'profiles', 'alice'), card))
+    await assertFails(setDoc(doc(carol(), 'profiles', 'carol'), card))
+    await assertFails(updateDoc(doc(bob(), 'profiles', 'bob'), { name: '' }))
+    await assertFails(updateDoc(doc(bob(), 'profiles', 'bob'), { email: 'bob@example.com' }))
+    await assertFails(updateDoc(doc(bob(), 'profiles', 'bob'), { nameSet: 'yes' }))
+    await assertFails(deleteDoc(doc(bob(), 'profiles', 'bob')))
+    await assertSucceeds(deleteDoc(doc(alice(), 'profiles', 'bob')))
+  })
+
   it('pet-friendly must be a boolean', async () => {
     await assertSucceeds(setDoc(doc(bob(), 'cafes', 'p1'), { ...cafe('bob'), petFriendly: true }))
     await assertFails(setDoc(doc(bob(), 'cafes', 'p2'), { ...cafe('bob'), petFriendly: 'yes' }))
