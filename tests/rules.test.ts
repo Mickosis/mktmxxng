@@ -4,7 +4,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, getDoc, getDocs, collection, increment, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { collectionGroup, deleteDoc, doc, getDoc, getDocs, collection, increment, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
@@ -150,6 +150,19 @@ describe('with admin alice and member bob', () => {
     await assertSucceeds(setDoc(doc(bob(), 'cafes', 'c1'), { ...cafe('bob'), links: ['https://www.tiktok.com/@x/video/1'] }))
     await assertFails(setDoc(doc(bob(), 'cafes', 'c2'), { ...cafe('bob'), links: Array.from({ length: 11 }, (_, i) => `https://x.com/${i}`) }))
     await assertFails(setDoc(doc(bob(), 'cafes', 'c3'), { ...cafe('bob'), links: 'https://x.com' }))
+  })
+
+  it('members rename only themselves, only the name', async () => {
+    await assertSucceeds(updateDoc(doc(bob(), 'members', 'bob@example.com'), { displayName: 'Bobby' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'bob@example.com'), { role: 'admin' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'bob@example.com'), { displayName: '' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'alice@example.com'), { displayName: 'not alice' }))
+    // Renaming old visits: own visits only.
+    await setDoc(doc(bob(), 'cafes', 'c1'), cafe('bob'))
+    await setDoc(doc(bob(), 'cafes', 'c1', 'visits', 'v1'), visit('bob'))
+    await assertSucceeds(getDocs(query(collectionGroup(bob(), 'visits'), where('uid', '==', 'bob'))))
+    await assertSucceeds(updateDoc(doc(bob(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'Bobby' }))
+    await assertFails(updateDoc(doc(alice(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'x' }))
   })
 
   it('taxonomy is limited to tags and areas', async () => {

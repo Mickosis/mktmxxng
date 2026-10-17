@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
+import { renameSelf } from '../data/members'
 
 export function message(err: unknown): string {
   const code = (err as { code?: string }).code ?? ''
@@ -56,7 +57,10 @@ export function SignInPage() {
         <p className="muted">{auth.user.email}</p>
         <hr className="rule" />
         {auth.isMember ? (
-          <p>You're a {auth.isAdmin ? 'admin' : 'member'}. You can add cafes and log visits.</p>
+          <>
+            <p>You're {auth.isAdmin ? 'an admin' : 'a member'}. You can add cafes and log visits.</p>
+            <RenameForm />
+          </>
         ) : auth.bootstrapped === false ? (
           <>
             <p>Nobody runs this list yet. Claim admin to start adding cafes and inviting people. Only the first person can do this.</p>
@@ -122,5 +126,42 @@ export function SignInOptions() {
       )}
       {error && <p className="error" role="alert">{error}</p>}
     </>
+  )
+}
+
+function RenameForm() {
+  const { user, displayName } = useAuth()
+  const [name, setName] = useState(displayName)
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const trimmed = name.trim()
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!user?.email || !trimmed) return
+    setBusy(true)
+    setStatus(null)
+    try {
+      await renameSelf(user.email.toLowerCase(), user.uid, trimmed)
+      setStatus({ ok: true, text: 'Name saved.' })
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="form" onSubmit={submit}>
+      <label className="field">
+        <span>Display name</span>
+        <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} autoComplete="nickname" />
+      </label>
+      <p className="muted small">Shown on your visits, including ones you already logged.</p>
+      {status && <p className={status.ok ? 'ok' : 'error'} role={status.ok ? 'status' : 'alert'}>{status.text}</p>}
+      <button className="btn" disabled={busy || !trimmed || trimmed === displayName}>
+        {busy ? 'Saving…' : 'Save name'}
+      </button>
+    </form>
   )
 }

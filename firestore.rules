@@ -66,6 +66,11 @@ service cloud.firestore {
       }
     }
 
+    // Lets a member find all their own visits to rename them.
+    match /{path=**}/visits/{visitId} {
+      allow read: if true;
+    }
+
     match /taxonomy/{docId} {
       allow read: if true;
       allow write: if isMember() && docId in ['tags', 'areas']
@@ -120,7 +125,12 @@ service cloud.firestore {
             && exists(invitePath(request.resource.data.invite))
             && get(invitePath(request.resource.data.invite)).data.usedBy == null
             && getAfter(invitePath(request.resource.data.invite)).data.usedBy == request.auth.uid);
-      allow update: if isAdmin() && request.resource.data.role in ['admin', 'member'];
+      allow update: if (isAdmin() && request.resource.data.role in ['admin', 'member'])
+        || (isMember() && email == myEmail()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+            && request.resource.data.displayName is string
+            && request.resource.data.displayName.size() > 0
+            && request.resource.data.displayName.size() <= 40);
       // Admins cannot remove themselves, so the app never ends up admin-less.
       allow delete: if isAdmin() && email != myEmail();
     }
