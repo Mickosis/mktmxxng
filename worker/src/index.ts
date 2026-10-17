@@ -1,5 +1,6 @@
-// Reads the caption of a TikTok, Instagram or Facebook post for the MKTMXXNG add-cafe form.
-// Only answers the app's own origins and only fetches those three sites, so it isn't an open proxy.
+// Reads the caption of a TikTok, Instagram or Facebook post, or the name and bio of a profile,
+// for the MKTMXXNG add-cafe form. Only answers the app's own origins and only fetches those
+// three sites, so it isn't an open proxy.
 
 const ORIGINS = ['https://mickosis.github.io', 'http://localhost:5199']
 
@@ -18,9 +19,13 @@ type Platform = 'tiktok' | 'instagram' | 'facebook'
 
 type Preview = {
   platform: Platform
+  kind: 'post' | 'profile'
   url: string
+  /** Post caption, or the profile's bio. */
   caption: string | null
   author: string | null
+  /** Display name, for profiles. */
+  name: string | null
   thumbnail: string | null
 }
 
@@ -28,9 +33,27 @@ const BROWSER_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
 const CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
 
+// First path segments that are site pages, not accounts.
+const IG_RESERVED = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct', 'about', 'legal', 'developer', 'share'])
+const FB_RESERVED = new Set([
+  'watch', 'reel', 'reels', 'share', 'groups', 'events', 'photo', 'photo.php', 'photos', 'story.php', 'permalink.php',
+  'marketplace', 'login', 'login.php', 'home.php', 'videos', 'gaming', 'hashtag', 'help', 'policies', 'privacy',
+])
+
 function platformOf(url: URL): Platform | null {
   if (url.protocol !== 'https:') return null
   return HOSTS[url.hostname.replace(/^www\./, '')] ?? null
+}
+
+/** True for an account page (tiktok.com/@kumo, instagram.com/kumo, facebook.com/kumo) rather than a post. */
+function isProfile(platform: Platform, url: URL): boolean {
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (platform === 'tiktok') return parts.length === 1 && parts[0].startsWith('@')
+  if (platform === 'instagram') return parts.length === 1 && !IG_RESERVED.has(parts[0].toLowerCase())
+  if (url.hostname === 'fb.watch') return false
+  if (parts[0] === 'profile.php') return url.searchParams.has('id')
+  if (parts[0] === 'people') return parts.length >= 2
+  return parts.length === 1 && !FB_RESERVED.has(parts[0].toLowerCase())
 }
 
 function cors(origin: string | null): Record<string, string> {
@@ -50,7 +73,7 @@ function json(body: unknown, status: number, origin: string | null, cache = fals
   })
 }
 
-/** Follows short links (vm.tiktok.com, tiktok.com/t/, fb.watch) to the real post URL. */
+/** Follows short links (vm.tiktok.com, tiktok.com/t/, fb.watch, facebook.com/share/) to the real URL. */
 async function resolve(url: URL): Promise<URL> {
   let current = url
   for (let hop = 0; hop < 4; hop++) {
@@ -61,33 +84,38 @@ async function resolve(url: URL): Promise<URL> {
     if (!platformOf(target)) break
     current = target
   }
-  current.search = ''
+  // profile.php keeps the account id in ?id=; everything else in the query is tracking.
+  const id = current.pathname === '/profile.php' ? current.searchParams.get('id') : null
+  current.search = id ? `?id=${id}` : ''
   current.hash = ''
   return current
+}
+
+function blank(platform: Platform, url: URL): Preview {
+  return { platform, kind: isProfile(platform, url) ? 'profile' : 'post', url: url.toString(), caption: null, author: null, name: null, thumbnail: null }
 }
 
 async function tiktok(url: URL): Promise<Preview> {
   const isShort = url.hostname !== 'www.tiktok.com' && url.hostname !== 'tiktok.com'
   const full = isShort || url.pathname.startsWith('/t/') ? await resolve(url) : url
+  const empty = blank('tiktok', full)
+  // oEmbed also answers for profile links, with the display name but no bio.
   const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(full.toString())}`
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(endpoint, { headers: { 'User-Agent': BROWSER_UA } })
     if (res.ok) {
       const data = (await res.json()) as { title?: string; author_name?: string; author_url?: string; thumbnail_url?: string }
       const handle = data.author_url?.split('/@')[1]
-      return {
-        platform: 'tiktok',
-        url: full.toString(),
-        caption: data.title || null,
-        author: handle ? `@${handle}` : data.author_name || null,
-        thumbnail: data.thumbnail_url || null,
-      }
+      const author = handle ? `@${handle}` : data.author_name || null
+      return empty.kind === 'profile'
+        ? { ...empty, author, name: data.author_name || null }
+        : { ...empty, caption: data.title || null, author, thumbnail: data.thumbnail_url || null }
     }
     // TikTok sheds load with 503 "overload-protect"; a short wait usually clears it.
     if (res.status !== 503) break
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
   }
-  return { platform: 'tiktok', url: full.toString(), caption: null, author: null, thumbnail: null }
+  return empty
 }
 
 function meta(html: string, property: string): string | null {
@@ -108,16 +136,27 @@ function decode(s: string): string {
     .replace(/&amp;/g, '&')
 }
 
-/** Instagram and Facebook only show captions in link-preview tags, and not always. Best effort. */
+/** Instagram and Facebook only show captions and bios in link-preview tags, and not always. Best effort. */
 async function meta_platform(platform: 'instagram' | 'facebook', url: URL): Promise<Preview> {
-  const full = platform === 'facebook' && url.hostname === 'fb.watch' ? await resolve(url) : url
-  const empty: Preview = { platform, url: full.toString(), caption: null, author: null, thumbnail: null }
+  const short = url.hostname === 'fb.watch' || url.pathname.startsWith('/share/')
+  const full = short ? await resolve(url) : url
+  const empty = blank(platform, full)
   const res = await fetch(full.toString(), { headers: { 'User-Agent': CRAWLER_UA, 'Accept-Language': 'en' } })
   if (!res.ok) return empty
   const html = (await res.text()).slice(0, 400_000)
   const title = meta(html, 'og:title')
   const description = meta(html, 'og:description')
   const thumbnail = meta(html, 'og:image')
+  // A login wall shows up as a generic "Instagram"/"Facebook"/"Log in" title.
+  if (title && /^(instagram|facebook|log in|log into facebook)\b/i.test(title)) return empty
+
+  if (platform === 'instagram' && empty.kind === 'profile') {
+    // og:title: Kumo Coffee (@kumo.coffee) • Instagram photos and videos
+    // description: 1K Followers, … - Kumo Coffee (@kumo.coffee) on Instagram: "bio"
+    const who = title?.match(/^(.*?)\s*\(@([\w.]+)\)/)
+    const bio = meta(html, 'description')?.match(/on Instagram:\s*["“](.*)["”]\s*$/s)?.[1] ?? null
+    return { ...empty, name: who?.[1] || null, author: who?.[2] ? `@${who[2]}` : null, caption: bio, thumbnail }
+  }
 
   if (platform === 'instagram') {
     // e.g. 123 likes, 4 comments - kumo.coffee on October 1, 2026: "caption here"
@@ -126,9 +165,19 @@ async function meta_platform(platform: 'instagram' | 'facebook', url: URL): Prom
     return { ...empty, caption, author: m?.[1] ? `@${m[1]}` : null, thumbnail }
   }
 
-  // Facebook puts the caption in og:description (or og:title for reels); "Facebook"/"Log in" means a login wall.
-  const caption = [description, title].find((t) => t && !/^(facebook|log in|log into facebook)/i.test(t)) ?? null
-  return { ...empty, caption, thumbnail }
+  if (empty.kind === 'profile') {
+    // og:title: Kumo Coffee | Makati   description: Kumo Coffee, Makati. 31,125 followers · 12 talking about this · 9 were here. Intro
+    const [name, ...place] = (title ?? '').split(/\s+[|•·]\s+/)
+    const intro = (description ?? '')
+      .replace(/[\d.,]+\s*[KkMm]?\s+(followers?|likes?|talking about this|were here|following)\b\.?/g, '')
+      .replace(/\s*·\s*/g, ' ')
+      .trim()
+    const bio = [place.join(', '), intro].filter(Boolean).join('\n')
+    return { ...empty, name: name?.trim() || null, caption: bio || null, thumbnail }
+  }
+
+  // Facebook puts a post's caption in og:description (or og:title for reels).
+  return { ...empty, caption: description || title || null, thumbnail }
 }
 
 export default {
@@ -149,7 +198,8 @@ export default {
     if (!platform) return json({ error: 'Only TikTok, Instagram and Facebook links are supported.' }, 400, origin)
 
     const cache = caches.default
-    const key = new Request(`https://preview.cache/${encodeURIComponent(target.toString())}`)
+    // v2: responses gained kind and name.
+    const key = new Request(`https://preview.cache/v2/${encodeURIComponent(target.toString())}`)
     const hit = await cache.match(key)
     if (hit) {
       const body = await hit.text()
@@ -158,12 +208,13 @@ export default {
 
     try {
       const preview = platform === 'tiktok' ? await tiktok(target) : await meta_platform(platform, target)
-      if (preview.caption) {
+      const found = !!(preview.caption || preview.name)
+      if (found) {
         ctx.waitUntil(cache.put(key, new Response(JSON.stringify(preview), { headers: { 'Cache-Control': 'max-age=86400' } })))
       }
-      return json(preview, 200, origin, !!preview.caption)
+      return json(preview, 200, origin, found)
     } catch {
-      return json({ platform, url: target.toString(), caption: null, author: null, thumbnail: null }, 200, origin)
+      return json(blank(platform, target), 200, origin)
     }
   },
 }

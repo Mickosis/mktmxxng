@@ -89,6 +89,21 @@ function tidy(s: string): string {
     .trim()
 }
 
+/** A profile's display name as a cafe name: "Kumo Coffee PH ☕️ | Makati" becomes "Kumo Coffee". */
+export function profileName(raw: string): string | undefined {
+  const name = tidy(raw.split(/\s+[|•·]\s+|\s+[-–—]\s+/)[0] ?? '')
+    .replace(/\s*\((?:official|ph|mnl|makati)\)$/i, '')
+    .replace(/\s+(?:official|ph|philippines|mnl|manila|makati( city)?)$/i, '')
+    .trim()
+  return name || undefined
+}
+
+/** A best guess from a handle when the profile itself can't be read: kumo.coffee becomes "Kumo Coffee". */
+export function nameFromHandle(handle: string): string | undefined {
+  const words = handle.replace(/[._-]+/g, ' ').trim()
+  return profileName(words.replace(/\b\p{L}/gu, (c) => c.toUpperCase()))
+}
+
 /** Reads a TikTok/IG/FB caption and guesses what it can about the cafe. */
 export function parseCaption(text: string, opts: { tags: string[]; areas: string[]; author?: string }): Prefill {
   const caption = text.normalize('NFC')

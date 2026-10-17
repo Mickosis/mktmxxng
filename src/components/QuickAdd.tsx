@@ -1,8 +1,8 @@
 import { useState, type ClipboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useCafes } from '../data/cafes'
-import { parseCaption, type Prefill } from '../prefill/parse'
-import { cleanLink, fetchPreview, findUrl, platformOf, PLATFORM_NAMES, sameLink, type Preview } from '../prefill/preview'
+import { nameFromHandle, parseCaption, profileName, type Prefill } from '../prefill/parse'
+import { cleanLink, fetchPreview, findUrl, handleOf, isProfile, platformOf, PLATFORM_NAMES, sameLink, type Preview } from '../prefill/preview'
 import type { Cafe } from '../types'
 
 type Props = {
@@ -16,15 +16,15 @@ type State =
   | { step: 'idle' }
   | { step: 'reading'; url: string }
   | { step: 'done'; preview: Preview | null; filled: string[]; mentions: string[] }
-  | { step: 'caption'; url: string }
-  | { step: 'duplicate'; cafe: Cafe }
+  | { step: 'caption'; url: string; filled: string[] }
+  | { step: 'duplicate'; cafe: Cafe; url: string }
   | { step: 'error'; message: string }
 
 function listOf(items: string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
-/** "Start from a post": paste a TikTok/IG/FB link (or its caption) and pre-fill the form. */
+/** "Start from a link": paste a TikTok/IG/FB post or profile link (or its caption) and pre-fill the form. */
 export function QuickAdd({ onPrefill, onLink }: Props) {
   const { cafes, tags, areas } = useCafes()
   const [state, setState] = useState<State>({ step: 'idle' })
@@ -33,6 +33,8 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
 
   function fromCaption(source: string, preview: Preview | null) {
     const parsed = parseCaption(source, { tags, areas, author: preview?.author ?? undefined })
+    // On a profile the account's own name is the best guess for the cafe's.
+    if (preview?.kind === 'profile' && preview.name) parsed.name = profileName(preview.name) ?? parsed.name
     const filled = onPrefill(parsed)
     setState({ step: 'done', preview, filled, mentions: parsed.mentions })
   }
@@ -53,17 +55,25 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
     }
     const dupe = cafes.find((c) => c.links?.some((l) => sameLink(l, url)))
     if (dupe) {
-      setState({ step: 'duplicate', cafe: dupe })
+      setState({ step: 'duplicate', cafe: dupe, url })
       return
     }
     onLink(url)
     setState({ step: 'reading', url })
     const preview = await fetchPreview(url)
-    if (preview?.caption) {
+    if (preview?.caption || preview?.name) {
       if (!sameLink(preview.url, url)) onLink(cleanLink(preview.url), url)
-      fromCaption(preview.caption, preview)
+      fromCaption(preview.caption ?? '', preview)
     } else {
-      setState({ step: 'caption', url })
+      // Instagram hides profiles from servers; the handle is still a decent guess at the name.
+      const handle = handleOf(url)
+      let filled: string[] = []
+      if (handle) {
+        const parsed = parseCaption(handle.replace(/[._-]+/g, ' '), { tags, areas })
+        parsed.name = nameFromHandle(handle)
+        filled = onPrefill(parsed)
+      }
+      setState({ step: 'caption', url, filled })
     }
   }
 
@@ -87,11 +97,15 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
   }
 
   const platform = state.step === 'caption' ? platformOf(state.url) : null
+  const profile = state.step === 'caption' && isProfile(state.url)
+  const source = state.step === 'done' && state.preview?.kind === 'profile' ? 'profile' : 'caption'
+  // Facebook pages have no @handle, so fall back to the page name.
+  const credit = state.step === 'done' ? (state.preview?.author ?? state.preview?.name) : null
 
   return (
     <section className="quick-add" aria-labelledby="quick-add-title">
-      <h2 id="quick-add-title">Start from a post</h2>
-      <p className="muted small">Copy a TikTok, Instagram or Facebook link, then tap Paste. We'll fill in what the caption says.</p>
+      <h2 id="quick-add-title">Start from a link</h2>
+      <p className="muted small">Copy a link to a TikTok, Instagram or Facebook post or profile, then tap Paste. We'll fill in what the caption or bio says.</p>
       <div className="row">
         <button type="button" className="btn btn-ink" onClick={pasteFromClipboard} disabled={state.step === 'reading'}>
           Paste link
@@ -117,7 +131,7 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
       </div>
 
       <div aria-live="polite">
-        {state.step === 'reading' && <p className="quick-status printing">Reading the post</p>}
+        {state.step === 'reading' && <p className="quick-status printing">{isProfile(state.url) ? 'Reading the profile' : 'Reading the post'}</p>}
 
         {state.step === 'done' && (
           <div className="quick-status">
@@ -126,10 +140,10 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
               {state.filled.length ? (
                 <p>
                   Filled in {listOf(state.filled)}
-                  {state.preview?.author ? ` from ${state.preview.author}'s caption` : ' from the caption'}. Check the details below.
+                  {credit ? ` from ${credit}'s ${source}` : ` from the ${source}`}. Check the details below.
                 </p>
               ) : (
-                <p>The caption didn't name the place. Fill in the details below; the link is saved.</p>
+                <p>The {source} didn't name the place. Fill in the details below; the link is saved.</p>
               )}
               {state.mentions.length > 0 && (
                 <p className="muted small">Mentioned: {state.mentions.map((m) => `@${m}`).join('  ')}</p>
@@ -142,9 +156,10 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
           <div className="quick-status quick-caption">
             <p>
               {platform === 'tiktok'
-                ? 'Couldn\'t read this TikTok right now.'
-                : `${platform ? PLATFORM_NAMES[platform] : 'This site'} doesn't share captions with other apps.`}{' '}
-              The link is saved. Copy the caption and paste it here to fill in the rest.
+                ? `Couldn't read this TikTok ${profile ? 'profile' : 'post'} right now.`
+                : `${platform ? PLATFORM_NAMES[platform] : 'This site'} didn't share this ${profile ? 'profile' : 'post'} with other apps.`}{' '}
+              {state.filled.length > 0 && `Filled in ${listOf(state.filled)} from the handle. `}
+              The link is saved. Copy the {profile ? 'bio' : 'caption'} and paste it here to fill in the rest.
             </p>
             <label className="field">
               <span className="sr-only">Caption</span>
@@ -160,18 +175,18 @@ export function QuickAdd({ onPrefill, onLink }: Props) {
                     fromCaption(pasted, null)
                   }
                 }}
-                placeholder="Paste the caption"
+                placeholder={profile ? 'Paste the bio' : 'Paste the caption'}
               />
             </label>
             <button type="button" className="btn" disabled={!caption.trim()} onClick={() => fromCaption(caption, null)}>
-              Fill in from caption
+              Fill in from {profile ? 'bio' : 'caption'}
             </button>
           </div>
         )}
 
         {state.step === 'duplicate' && (
           <p className="quick-status warn">
-            This post is already on file under <Link to={`/cafe/${state.cafe.id}`}>{state.cafe.name}</Link>.
+            This {isProfile(state.url) ? 'profile' : 'post'} is already on file under <Link to={`/cafe/${state.cafe.id}`}>{state.cafe.name}</Link>.
           </p>
         )}
 
