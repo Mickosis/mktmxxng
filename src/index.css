@@ -955,3 +955,67 @@ input.invite-url {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---------- Start from a post ---------- */
+
+.quick-add {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1.5px dashed var(--rule);
+  border-radius: 4px;
+}
+
+.quick-add .btn-ink {
+  flex: 0 0 auto;
+}
+
+.quick-status {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.quick-status > div,
+.quick-caption {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+}
+
+.quick-caption {
+  display: grid;
+}
+
+.quick-thumb {
+  width: 56px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.printing::after {
+  content: '...';
+  display: inline-block;
+  width: 3ch;
+  animation: dots 900ms steps(4, end) infinite;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+@keyframes dots {
+  from {
+    width: 0;
+  }
+  to {
+    width: 3ch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .printing::after {
+    animation: none;
+  }
+}

@@ -2,8 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
+import { QuickAdd } from '../components/QuickAdd'
 import { Stamp } from '../components/Stamp'
 import { createCafe, updateCafe, useCafes } from '../data/cafes'
+import { mergePrefill } from '../prefill/merge'
+import type { Prefill } from '../prefill/parse'
 import { isHttpUrl, linkLabel, mapsLink, WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
 
 const BLANK: CafeInput = {
@@ -104,6 +107,18 @@ function CafeFormInner({ id }: { id?: string }) {
     setNewLink('')
   }
 
+  function applyPrefill(p: Prefill): string[] {
+    setForm((f) => mergePrefill(f, p).next)
+    return mergePrefill(form, p).filled
+  }
+
+  function attachLink(url: string, replaces?: string) {
+    setForm((f) => {
+      const links = f.links.filter((l) => l !== replaces)
+      return links.includes(url) || links.length >= 10 ? { ...f, links } : { ...f, links: [...links, url] }
+    })
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!form.name.trim() || !form.area.trim()) {
@@ -133,6 +148,7 @@ function CafeFormInner({ id }: { id?: string }) {
     <Slip>
       <form onSubmit={submit} className="form">
         <h1>{existing ? `Edit ${existing.name}` : 'Add a cafe'}</h1>
+        {!existing && <QuickAdd onPrefill={applyPrefill} onLink={attachLink} />}
 
         <label className="field">
           <span>Name</span>

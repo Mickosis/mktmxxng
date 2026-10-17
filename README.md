@@ -33,6 +33,20 @@ Pushing to `main` runs `.github/workflows/deploy.yml`: lint, build and the rules
 
 The rules deploy needs a `FIREBASE_SERVICE_ACCOUNT` repo secret holding a JSON key for a service account with the Firebase Rules Admin role on `mktmxxng-a4b85`.
 
+## Caption helper (Cloudflare Worker)
+
+"Start from a post" on the Add cafe page reads TikTok, Instagram and Facebook captions to pre-fill the form. Full TikTok links work straight from the browser. Short TikTok links (`vm.tiktok.com`, `tiktok.com/t/`) and best-effort Instagram/Facebook previews go through a small Cloudflare Worker in `worker/` (free plan).
+
+```sh
+cd worker
+npx wrangler login      # once
+npx wrangler deploy
+```
+
+Put the `https://mktmxxng-preview.<you>.workers.dev` URL in `src/config.ts` (or `VITE_PREVIEW_URL`). Run it locally with `npx wrangler dev --port 8787` and `VITE_PREVIEW_URL=http://localhost:8787 npm run dev`.
+
+Caption parser tests: `npm test`.
+
 ## First run
 
 Sign in on the live site, then tap **Claim admin**. Only the first person can do this. After that, invite people from **Members**.

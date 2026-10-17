@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:rules": "npx firebase-tools emulators:exec --only firestore --project demo-mktmxxng \"vitest run tests\""
+    "test:rules": "npx firebase-tools emulators:exec --only firestore --project demo-mktmxxng \"vitest run tests\"",
+    "test": "vitest run tests/parse.test.ts"
   },
   "dependencies": {
     "firebase": "^13.0.0",
