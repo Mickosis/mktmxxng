@@ -45,18 +45,28 @@ jobs:
   rules:
     needs: check
     runs-on: ubuntu-latest
+    # Until the service account secret exists, rules are deployed by hand and this job is a no-op.
+    env:
+      HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - if: env.HAS_KEY != 'true'
+        run: echo "::notice::FIREBASE_SERVICE_ACCOUNT is not set, skipping the rules deploy. Deploy rules locally with npx firebase-tools deploy --only firestore:rules."
+      - if: env.HAS_KEY == 'true'
+        uses: actions/checkout@v7
+      - if: env.HAS_KEY == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - uses: google-github-actions/auth@v3
+      - if: env.HAS_KEY == 'true'
+        run: npm ci
+      - if: env.HAS_KEY == 'true'
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       # Unchanged rules are a no-op upload, so this runs on every deploy.
-      - run: npx firebase-tools deploy --only firestore:rules --project mktmxxng-a4b85 --non-interactive
+      - if: env.HAS_KEY == 'true'
+        run: npx firebase-tools deploy --only firestore:rules --project mktmxxng-a4b85 --non-interactive
 
   # Rules go out first so the new app never runs against old rules.
   deploy:
