@@ -1,10 +1,13 @@
-import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { HashRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
-import { AuthProvider } from './auth'
+import { AuthProvider, useAuth } from './auth'
 import { Shell, Slip } from './components/Shell'
 import { CafesProvider } from './data/cafes'
+import { PENDING_INVITE_KEY } from './data/invites'
+import { storage } from './storage'
 import { CafeForm } from './pages/CafeForm'
 import { CafePage } from './pages/CafePage'
+import { JoinPage } from './pages/JoinPage'
 import { ListPage } from './pages/ListPage'
 import { MembersPage } from './pages/MembersPage'
 import { RollPage } from './pages/RollPage'
@@ -19,12 +22,27 @@ function ScrollTop() {
   return null
 }
 
+// After an email-link sign-in lands on the home page, send the person back to their invite.
+function ResumeInvite() {
+  const { user, isMember } = useAuth()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    const token = storage.get(PENDING_INVITE_KEY)
+    if (!token || !user) return
+    if (isMember) storage.remove(PENDING_INVITE_KEY)
+    else if (!pathname.startsWith('/join/')) navigate(`/join/${token}`, { replace: true })
+  }, [user, isMember, pathname, navigate])
+  return null
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <CafesProvider>
         <HashRouter>
           <ScrollTop />
+          <ResumeInvite />
           <Shell>
             <Routes>
               <Route path="/" element={<RollPage />} />
@@ -36,6 +54,7 @@ export default function App() {
               <Route path="/cafe/:id/visit/:visitId" element={<VisitForm />} />
               <Route path="/members" element={<MembersPage />} />
               <Route path="/signin" element={<SignInPage />} />
+              <Route path="/join/:token" element={<JoinPage />} />
               <Route path="*" element={<Slip><p>Nothing printed at this address.</p></Slip>} />
             </Routes>
           </Shell>

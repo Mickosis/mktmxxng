@@ -929,3 +929,38 @@ textarea::placeholder {
   font-size: 1.15em;
   letter-spacing: 0.08em;
 }
+
+.invite {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.invite + .invite {
+  border-top: 1.5px dashed var(--rule);
+}
+
+input.invite-url {
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.invite-fresh input.invite-url {
+  color: var(--ink);
+  border-bottom-color: var(--stamp);
+}
+
+.social-link {
+  min-height: 40px;
+  align-items: center;
+  text-decoration: none;
+}
+
+.social-link .line-dots {
+  transform: none;
+}
+
+.social-link .line-val {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

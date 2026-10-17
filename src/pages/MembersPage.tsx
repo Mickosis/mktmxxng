@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { Slip } from '../components/Shell'
+import { createInvite, inviteUrl, revokeInvite, useInvites, type Invite } from '../data/invites'
 import { addMember, removeMember, useMembers } from '../data/members'
 import type { Member } from '../types'
 
 export function MembersPage() {
   const { isAdmin, user } = useAuth()
   const members = useMembers(isAdmin)
+  const invites = useInvites(isAdmin)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<Member['role']>('member')
@@ -42,9 +44,11 @@ export function MembersPage() {
 
   return (
     <>
+      <InviteLinks invites={invites} uid={user!.uid} />
+
       <Slip>
         <form className="form" onSubmit={submit}>
-          <h1>Invite a member</h1>
+          <h2>Or add someone by email</h2>
           <p className="muted">They sign in with this email (Google or email link) and can then add cafes and log visits.</p>
           <label className="field">
             <span>Email</span>
@@ -86,5 +90,102 @@ export function MembersPage() {
         </ul>
       </Slip>
     </>
+  )
+}
+
+function InviteLinks({ invites, uid }: { invites: Invite[]; uid: string }) {
+  const [label, setLabel] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [fresh, setFresh] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function create(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const token = await createInvite(uid, label)
+      setFresh(token)
+      setLabel('')
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function copy(token: string) {
+    try {
+      await navigator.clipboard.writeText(inviteUrl(token))
+      setCopied(token)
+    } catch {
+      setError('Couldn\'t copy. Long-press the link to copy it instead.')
+    }
+  }
+
+  async function share(token: string) {
+    try {
+      await navigator.share({ title: 'Join MKTMXXNG', text: 'Join my Makati cafe list', url: inviteUrl(token) })
+    } catch {
+      /* share sheet dismissed */
+    }
+  }
+
+  const open = invites.filter((i) => !i.usedBy)
+  const used = invites.filter((i) => i.usedBy)
+  const canShare = typeof navigator !== 'undefined' && 'share' in navigator
+
+  return (
+    <Slip>
+      <form className="form" onSubmit={create}>
+        <h1>Invite a member</h1>
+        <p className="muted">Make a link and send it in any chat. It works once: whoever opens it first signs in and joins.</p>
+        <label className="field">
+          <span>Who's it for? <span className="muted">(optional, just for you)</span></span>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Ana" autoComplete="off" />
+        </label>
+        <button type="submit" className="btn btn-ink" disabled={busy}>{busy ? 'Making link…' : 'Create invite link'}</button>
+      </form>
+      {error && <p className="error" role="alert">{error}</p>}
+
+      {open.length > 0 && (
+        <>
+          <hr className="rule" />
+          <h2>Unused links</h2>
+          <ul className="lines">
+            {open.map((i) => (
+              <li key={i.token} className={`invite${fresh === i.token ? ' invite-fresh' : ''}`}>
+                <p>{i.label || 'Invite link'}</p>
+                <input className="invite-url" readOnly value={inviteUrl(i.token)} onFocus={(e) => e.target.select()} aria-label="Invite link" />
+                <div className="row">
+                  <button type="button" className="btn" onClick={() => copy(i.token)}>{copied === i.token ? 'Copied' : 'Copy link'}</button>
+                  {canShare && <button type="button" className="btn" onClick={() => share(i.token)}>Share</button>}
+                  <ConfirmButton confirmLabel="Tap again" onConfirm={() => revokeInvite(i.token).catch((e) => setError(e.message))}>
+                    Revoke
+                  </ConfirmButton>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {used.length > 0 && (
+        <>
+          <hr className="rule" />
+          <h2>Used links</h2>
+          <ul className="lines">
+            {used.map((i) => (
+              <li key={i.token} className="line">
+                <span className="line-name">{i.label || 'Invite link'}</span>
+                <span className="line-dots" aria-hidden="true" />
+                <span className="line-val muted small">{i.usedByEmail}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Slip>
   )
 }

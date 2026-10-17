@@ -4,7 +4,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, getDoc, getDocs, collection, increment, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { deleteDoc, doc, getDoc, getDocs, collection, increment, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
@@ -36,6 +36,19 @@ const alice = () => as('alice', 'alice@example.com')
 const bob = () => as('bob', 'bob@example.com')
 const carol = () => as('carol', 'carol@example.com')
 const anon = () => env.unauthenticatedContext().firestore()
+
+const TOKEN = 'tok_abcdefghijklmnopqrstuvwxyz'
+
+function invite(uid: string) {
+  return { createdBy: uid, createdAt: serverTimestamp(), label: 'for carol', usedBy: null, usedByEmail: null, usedAt: null }
+}
+
+async function redeem(db: ReturnType<typeof alice>, email: string, uid: string, token = TOKEN) {
+  const b = writeBatch(db)
+  b.set(doc(db, 'members', email), { role: 'member', displayName: uid, addedAt: serverTimestamp(), invite: token })
+  b.update(doc(db, 'invites', token), { usedBy: uid, usedByEmail: email, usedAt: serverTimestamp() })
+  return b.commit()
+}
 
 async function claim(db: ReturnType<typeof alice>, email: string, uid: string) {
   const b = writeBatch(db)
@@ -133,8 +146,45 @@ describe('with admin alice and member bob', () => {
     await assertSucceeds(deleteDoc(doc(alice(), 'members', 'bob@example.com')))
   })
 
+  it('cafes can carry up to 10 social links', async () => {
+    await assertSucceeds(setDoc(doc(bob(), 'cafes', 'c1'), { ...cafe('bob'), links: ['https://www.tiktok.com/@x/video/1'] }))
+    await assertFails(setDoc(doc(bob(), 'cafes', 'c2'), { ...cafe('bob'), links: Array.from({ length: 11 }, (_, i) => `https://x.com/${i}`) }))
+    await assertFails(setDoc(doc(bob(), 'cafes', 'c3'), { ...cafe('bob'), links: 'https://x.com' }))
+  })
+
   it('taxonomy is limited to tags and areas', async () => {
     await assertSucceeds(setDoc(doc(bob(), 'taxonomy', 'tags'), { list: ['coffee', 'brunch'] }))
     await assertFails(setDoc(doc(bob(), 'taxonomy', 'other'), { list: [] }))
+  })
+
+  it('invite links: admin creates, one person redeems once', async () => {
+    await assertFails(setDoc(doc(bob(), 'invites', TOKEN), invite('bob')))
+    await assertFails(setDoc(doc(alice(), 'invites', 'short'), invite('alice')))
+    await assertSucceeds(setDoc(doc(alice(), 'invites', TOKEN), invite('alice')))
+    await assertSucceeds(getDoc(doc(anon(), 'invites', TOKEN)))
+    await assertFails(getDocs(collection(bob(), 'invites')))
+    await assertSucceeds(getDocs(collection(alice(), 'invites')))
+
+    // Can't make yourself a member without consuming the invite, or as admin.
+    await assertFails(setDoc(doc(carol(), 'members', 'carol@example.com'), { role: 'member', invite: TOKEN }))
+    const db = carol()
+    const b = writeBatch(db)
+    b.set(doc(db, 'members', 'carol@example.com'), { role: 'admin', invite: TOKEN })
+    b.update(doc(db, 'invites', TOKEN), { usedBy: 'carol', usedByEmail: 'carol@example.com', usedAt: serverTimestamp() })
+    await assertFails(b.commit())
+    // Unverified email can't redeem.
+    await assertFails(redeem(as('eve', 'eve@example.com', false), 'eve@example.com', 'eve'))
+
+    await assertSucceeds(redeem(carol(), 'carol@example.com', 'carol'))
+    await assertSucceeds(setDoc(doc(carol(), 'cafes', 'c9'), cafe('carol')))
+    // Second use fails.
+    await assertFails(redeem(as('dan', 'dan@example.com'), 'dan@example.com', 'dan'))
+  })
+
+  it('missing or revoked invite cannot be redeemed', async () => {
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol', 'tok_doesnotexist_000000000'))
+    await setDoc(doc(alice(), 'invites', TOKEN), invite('alice'))
+    await assertSucceeds(deleteDoc(doc(alice(), 'invites', TOKEN)))
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol'))
   })
 })

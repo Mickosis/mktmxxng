@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { Slip } from '../components/Shell'
+import { SocialLinks } from '../components/SocialLinks'
 import { Stamp } from '../components/Stamp'
 import { Stars } from '../components/Stars'
 import { deleteCafe, useCafes } from '../data/cafes'
@@ -62,6 +63,7 @@ export function CafePage() {
           <p className="ticket-sub">{[pesos(cafe.price), ...work.map((w) => WORK_LABELS[w])].filter(Boolean).join('  ')}</p>
         )}
         {cafe.notes && <p className="ticket-note">{cafe.notes}</p>}
+        <SocialLinks links={cafe.links} />
 
         <hr className="rule" />
         <div className="line total">

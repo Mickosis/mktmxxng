@@ -4,7 +4,7 @@ import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
 import { Stamp } from '../components/Stamp'
 import { createCafe, updateCafe, useCafes } from '../data/cafes'
-import { WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
+import { isHttpUrl, linkLabel, WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
 
 const BLANK: CafeInput = {
   name: '',
@@ -15,6 +15,7 @@ const BLANK: CafeInput = {
   price: 0,
   notes: '',
   work: { wifi: false, outlets: false, laptop: false },
+  links: [],
 }
 
 const PRICES = [
@@ -49,10 +50,12 @@ function CafeFormInner({ id }: { id?: string }) {
           price: existing.price,
           notes: existing.notes,
           work: { ...BLANK.work, ...existing.work },
+          links: existing.links ?? [],
         }
       : BLANK,
   )
   const [newTag, setNewTag] = useState('')
+  const [newLink, setNewLink] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -88,6 +91,17 @@ function CafeFormInner({ id }: { id?: string }) {
     setNewTag('')
   }
 
+  function addLink() {
+    const url = newLink.trim()
+    if (!isHttpUrl(url)) {
+      setError('Paste the full link, starting with https://')
+      return
+    }
+    setError(null)
+    if (!form.links.includes(url)) set({ links: [...form.links, url].slice(0, 10) })
+    setNewLink('')
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!form.name.trim() || !form.area.trim()) {
@@ -98,10 +112,17 @@ function CafeFormInner({ id }: { id?: string }) {
       setError('Maps link should start with https://')
       return
     }
+    // A pasted link that wasn't added yet still counts.
+    const pending = newLink.trim()
+    if (pending && !isHttpUrl(pending)) {
+      setError('Paste the full link, starting with https://')
+      return
+    }
+    const input = pending ? { ...form, links: [...form.links, pending] } : form
     setSaving(true)
     setError(null)
     try {
-      const cafeId = existing ? (await updateCafe(existing.id, form), existing.id) : await createCafe(form, user!.uid)
+      const cafeId = existing ? (await updateCafe(existing.id, input), existing.id) : await createCafe(input, user!.uid)
       navigate(`/cafe/${cafeId}`, { replace: true })
     } catch (err) {
       setError((err as Error).message)
@@ -196,6 +217,50 @@ function CafeFormInner({ id }: { id?: string }) {
               </label>
             ))}
           </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>TikToks, reels and posts <span className="muted">(optional)</span></legend>
+          {form.links.length > 0 && (
+            <ul className="lines">
+              {form.links.map((l) => (
+                <li key={l} className="line">
+                  <a className="line-name" href={l} target="_blank" rel="noreferrer">{linkLabel(l)}</a>
+                  <span className="line-dots" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="link-btn"
+                    aria-label={`Remove ${linkLabel(l)} link`}
+                    onClick={() => set({ links: form.links.filter((x) => x !== l) })}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {form.links.length < 10 && (
+            <div className="row">
+              <label className="field grow">
+                <span className="sr-only">Link to a video or post</span>
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addLink()
+                    }
+                  }}
+                  placeholder="https://www.tiktok.com/@…"
+                  autoComplete="off"
+                />
+              </label>
+              <button type="button" className="btn" onClick={addLink} disabled={!newLink.trim()}>Add link</button>
+            </div>
+          )}
         </fieldset>
 
         <label className="field">

@@ -36,7 +36,8 @@ service cloud.firestore {
         && d.price is int && d.price >= 0 && d.price <= 3
         && d.visitCount is int && d.visitCount >= 0
         && d.ratingSum is number && d.ratingSum >= 0
-        && d.raters is map;
+        && d.raters is map
+        && (!('links' in d) || (d.links is list && d.links.size() <= 10));
     }
 
     function validVisit(d) {
@@ -83,13 +84,42 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function invitePath(token) {
+      return /databases/$(database)/documents/invites/$(token);
+    }
+
+    // Single-use invite links. Holding the link (the token) is what lets you read it.
+    match /invites/{token} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin() && token.size() >= 24
+        && request.resource.data.keys().hasOnly(['createdBy', 'createdAt', 'label', 'usedBy', 'usedByEmail', 'usedAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.usedBy == null;
+      allow delete: if isAdmin();
+      // Redeem: mark it used by yourself, in the same batch as creating your member doc.
+      allow update: if signedIn() && resource.data.usedBy == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedByEmail', 'usedAt'])
+        && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedByEmail == myEmail()
+        && existsAfter(memberPath())
+        && getAfter(memberPath()).data.invite == token;
+    }
+
     match /members/{email} {
       allow read: if signedIn() && (email == myEmail() || isMember());
       allow create: if (isAdmin() && request.resource.data.role in ['admin', 'member'])
         || (signedIn() && email == myEmail()
             && !exists(bootstrapPath())
             && existsAfter(bootstrapPath())
-            && request.resource.data.role == 'admin');
+            && request.resource.data.role == 'admin')
+        || (signedIn() && email == myEmail()
+            && request.resource.data.keys().hasOnly(['role', 'displayName', 'addedAt', 'invite'])
+            && request.resource.data.role == 'member'
+            && request.resource.data.invite is string
+            && exists(invitePath(request.resource.data.invite))
+            && get(invitePath(request.resource.data.invite)).data.usedBy == null
+            && getAfter(invitePath(request.resource.data.invite)).data.usedBy == request.auth.uid);
       allow update: if isAdmin() && request.resource.data.role in ['admin', 'member'];
       // Admins cannot remove themselves, so the app never ends up admin-less.
       allow delete: if isAdmin() && email != myEmail();

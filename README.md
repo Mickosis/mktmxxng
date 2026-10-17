@@ -29,11 +29,9 @@ npm run test:rules
 
 ## Deploy
 
-Pushing to `main` builds and publishes to GitHub Pages through `.github/workflows/deploy.yml`. Firestore rules deploy separately:
+Pushing to `main` runs `.github/workflows/deploy.yml`: lint, build and the rules tests, then the Firestore rules deploy, then the GitHub Pages publish. If a check fails, nothing ships. Pushes that only touch Markdown files skip the workflow.
 
-```sh
-npx firebase-tools deploy --only firestore:rules
-```
+The rules deploy needs a `FIREBASE_SERVICE_ACCOUNT` repo secret holding a JSON key for a service account with the Firebase Rules Admin role on `mktmxxng-a4b85`.
 
 ## First run
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
 
-function message(err: unknown): string {
+export function message(err: unknown): string {
   const code = (err as { code?: string }).code ?? ''
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return ''
   if (code === 'auth/popup-blocked') return 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.'
@@ -15,7 +15,6 @@ function message(err: unknown): string {
 export function SignInPage() {
   const auth = useAuth()
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,6 +78,33 @@ export function SignInPage() {
     <Slip>
       <h1>Sign in</h1>
       <p className="muted">Anyone can browse and roll. Sign in if you've been invited to add cafes and log visits.</p>
+      <SignInOptions />
+    </Slip>
+  )
+}
+
+/** Google button + email-link form. Shared by the sign-in and join pages. */
+export function SignInOptions() {
+  const auth = useAuth()
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function run(fn: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (err) {
+      setError(message(err) || null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
       <button className="btn btn-ink btn-block" disabled={busy} onClick={() => run(auth.signInWithGoogle)}>
         Continue with Google
       </button>
@@ -95,6 +121,6 @@ export function SignInPage() {
         </form>
       )}
       {error && <p className="error" role="alert">{error}</p>}
-    </Slip>
+    </>
   )
 }

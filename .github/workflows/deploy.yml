@@ -1,8 +1,9 @@
-name: Deploy to GitHub Pages
+name: Deploy
 
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
 permissions:
@@ -10,12 +11,39 @@ permissions:
   pages: write
   id-token: write
 
+# Let an in-flight deploy finish instead of cancelling it halfway through a rules release.
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
-  build:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      # The Firestore emulator used by the rules tests needs Java.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:rules
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  rules:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -24,13 +52,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
-      - uses: actions/upload-pages-artifact@v5
+      - uses: google-github-actions/auth@v3
         with:
-          path: dist
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      # Unchanged rules are a no-op upload, so this runs on every deploy.
+      - run: npx firebase-tools deploy --only firestore:rules --project mktmxxng-a4b85 --non-interactive
 
+  # Rules go out first so the new app never runs against old rules.
   deploy:
-    needs: build
+    needs: [check, rules]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

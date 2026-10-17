@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { db } from '../firebase'
-import { DEFAULT_TAGS, type Cafe, type CafeInput } from '../types'
+import { DEFAULT_TAGS, isHttpUrl, type Cafe, type CafeInput } from '../types'
 
 type CafesState = {
   cafes: Cafe[]
@@ -85,6 +85,7 @@ function clean(input: CafeInput): CafeInput {
     price: input.price,
     notes: input.notes.trim(),
     work: input.work,
+    links: [...new Set(input.links.map((l) => l.trim()).filter(isHttpUrl))].slice(0, 10),
   }
 }
 

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { itemMemory, useVisits } from '../data/visits'
 import { average, mapsLink, pesos, WORK_LABELS, type Cafe, type WorkFlag } from '../types'
+import { SocialLinks } from './SocialLinks'
 import { Stamp } from './Stamp'
 import { Stars } from './Stars'
 
@@ -75,6 +76,7 @@ export function Ticket({ cafe, orderNo, printedAt }: Props) {
         </p>
       )}
       {cafe.notes && <p className="ticket-note">{cafe.notes}</p>}
+      <SocialLinks links={cafe.links} />
 
       <hr className="rule" />
       <div className="ticket-actions">
