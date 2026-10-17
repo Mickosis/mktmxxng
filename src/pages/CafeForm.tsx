@@ -4,7 +4,7 @@ import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
 import { Stamp } from '../components/Stamp'
 import { createCafe, updateCafe, useCafes } from '../data/cafes'
-import { isHttpUrl, linkLabel, WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
+import { isHttpUrl, linkLabel, mapsLink, WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
 
 const BLANK: CafeInput = {
   name: '',
@@ -108,17 +108,14 @@ function CafeFormInner({ id }: { id?: string }) {
       setError('Name and area are required.')
       return
     }
-    if (form.mapsUrl.trim() && !/^https?:\/\//.test(form.mapsUrl.trim())) {
-      setError('Maps link should start with https://')
-      return
-    }
     // A pasted link that wasn't added yet still counts.
     const pending = newLink.trim()
     if (pending && !isHttpUrl(pending)) {
       setError('Paste the full link, starting with https://')
       return
     }
-    const input = pending ? { ...form, links: [...form.links, pending] } : form
+    // The Maps link is always built from name + address now.
+    const input = { ...form, mapsUrl: '', links: pending ? [...form.links, pending] : form.links }
     setSaving(true)
     setError(null)
     try {
@@ -186,41 +183,8 @@ function CafeFormInner({ id }: { id?: string }) {
           </datalist>
         </label>
 
-        <label className="field">
-          <span>Address <span className="muted">(optional)</span></span>
-          <input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Street, building" />
-        </label>
-
-        <label className="field">
-          <span>Google Maps link <span className="muted">(optional)</span></span>
-          <input type="url" inputMode="url" value={form.mapsUrl} onChange={(e) => set({ mapsUrl: e.target.value })} placeholder="https://maps.app.goo.gl/…" />
-        </label>
-
         <fieldset>
-          <legend>Price</legend>
-          <div className="segmented">
-            {PRICES.map((p) => (
-              <button key={p.value} type="button" aria-pressed={form.price === p.value} onClick={() => set({ price: p.value })}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Good for working?</legend>
-          <div className="checks">
-            {(Object.keys(WORK_LABELS) as WorkFlag[]).map((w) => (
-              <label key={w} className="check">
-                <input type="checkbox" checked={form.work[w]} onChange={(e) => set({ work: { ...form.work, [w]: e.target.checked } })} />
-                <span>{WORK_LABELS[w]}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>TikToks, reels and posts <span className="muted">(optional)</span></legend>
+          <legend>Social media and reels <span className="muted">(optional)</span></legend>
           {form.links.length > 0 && (
             <ul className="lines">
               {form.links.map((l) => (
@@ -254,13 +218,49 @@ function CafeFormInner({ id }: { id?: string }) {
                       addLink()
                     }
                   }}
-                  placeholder="https://www.tiktok.com/@…"
+                  placeholder="Paste a TikTok or reel"
                   autoComplete="off"
                 />
               </label>
               <button type="button" className="btn" onClick={addLink} disabled={!newLink.trim()}>Add link</button>
             </div>
           )}
+        </fieldset>
+
+        <label className="field">
+          <span>Address <span className="muted">(optional)</span></span>
+          <input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Street, building" autoComplete="off" />
+        </label>
+        {form.name.trim() && (
+          <p className="small muted">
+            Open in Maps searches for this name and address in Makati.{' '}
+            <a href={mapsLink({ name: form.name.trim(), address: form.address.trim(), area: form.area.trim(), mapsUrl: '' })} target="_blank" rel="noreferrer">
+              Check it on Google Maps
+            </a>
+          </p>
+        )}
+
+        <fieldset>
+          <legend>Price</legend>
+          <div className="segmented">
+            {PRICES.map((p) => (
+              <button key={p.value} type="button" aria-pressed={form.price === p.value} onClick={() => set({ price: p.value })}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Good for working?</legend>
+          <div className="checks">
+            {(Object.keys(WORK_LABELS) as WorkFlag[]).map((w) => (
+              <label key={w} className="check">
+                <input type="checkbox" checked={form.work[w]} onChange={(e) => set({ work: { ...form.work, [w]: e.target.checked } })} />
+                <span>{WORK_LABELS[w]}</span>
+              </label>
+            ))}
+          </div>
         </fieldset>
 
         <label className="field">

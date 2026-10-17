@@ -67,9 +67,9 @@ export function pesos(price: number): string {
   return price > 0 ? '₱'.repeat(price) : ''
 }
 
-export function mapsLink(c: Pick<Cafe, 'mapsUrl' | 'name' | 'address'>): string {
+export function mapsLink(c: Pick<Cafe, 'mapsUrl' | 'name' | 'address' | 'area'>): string {
   if (c.mapsUrl) return c.mapsUrl
-  const q = [c.name, c.address || 'Makati'].join(', ')
+  const q = [c.name, c.address, c.area, 'Makati'].filter(Boolean).join(', ')
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
 }
 
