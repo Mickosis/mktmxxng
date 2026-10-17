@@ -8,8 +8,8 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   writeBatch,
-  type Timestamp,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../firebase'
@@ -19,9 +19,19 @@ export type Invite = {
   createdBy: string
   createdAt?: Timestamp
   label: string
-  usedBy: string | null
-  usedByEmail: string | null
-  usedAt: Timestamp | null
+  /** Missing on invites made before links expired. */
+  expiresAt?: Timestamp
+}
+
+export const INVITE_DAYS = 7
+
+export function isExpired(invite: Invite): boolean {
+  return !invite.expiresAt || invite.expiresAt.toMillis() <= Date.now()
+}
+
+/** Whole days left, rounded up, so a link made today reads "7 days". */
+export function daysLeft(invite: Invite): number {
+  return invite.expiresAt ? Math.max(0, Math.ceil((invite.expiresAt.toMillis() - Date.now()) / 86_400_000)) : 0
 }
 
 export const PENDING_INVITE_KEY = 'mk.pendingInvite'
@@ -52,10 +62,8 @@ export async function createInvite(uid: string, label: string): Promise<string> 
   await setDoc(doc(db, 'invites', token), {
     createdBy: uid,
     createdAt: serverTimestamp(),
-    label: label.trim(),
-    usedBy: null,
-    usedByEmail: null,
-    usedAt: null,
+    label: label.trim().slice(0, 60),
+    expiresAt: Timestamp.fromMillis(Date.now() + INVITE_DAYS * 86_400_000),
   })
   return token
 }
@@ -69,10 +77,25 @@ export async function getInvite(token: string): Promise<Invite | null> {
   return snap.exists() ? ({ token, ...snap.data() } as Invite) : null
 }
 
-/** Uses up the invite and makes you a member, atomically. */
-export async function redeemInvite(token: string, uid: string, email: string, displayName: string) {
+/** Makes you a member and deletes the invite in one step, so it can't be used again. */
+export async function redeemInvite(invite: Invite, email: string, displayName: string) {
   const batch = writeBatch(db)
-  batch.set(doc(db, 'members', email), { role: 'member', displayName, addedAt: serverTimestamp(), invite: token })
-  batch.update(doc(db, 'invites', token), { usedBy: uid, usedByEmail: email, usedAt: serverTimestamp() })
+  batch.set(doc(db, 'members', email), {
+    role: 'member',
+    displayName,
+    addedAt: serverTimestamp(),
+    invite: invite.token,
+    inviteLabel: invite.label,
+  })
+  batch.delete(doc(db, 'invites', invite.token))
+  await batch.commit()
+}
+
+/** Admin cleanup: expired links, plus used ones left over from before links were deleted on use. */
+export async function purgeStaleInvites(invites: (Invite & { usedBy?: unknown })[]) {
+  const stale = invites.filter((i) => isExpired(i) || i.usedBy)
+  if (!stale.length) return
+  const batch = writeBatch(db)
+  stale.forEach((i) => batch.delete(doc(db, 'invites', i.token)))
   await batch.commit()
 }

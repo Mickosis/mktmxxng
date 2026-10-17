@@ -4,7 +4,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { collectionGroup, deleteDoc, doc, getDoc, getDocs, collection, increment, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collectionGroup, deleteDoc, doc, getDoc, getDocs, collection, increment, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
@@ -39,14 +39,16 @@ const anon = () => env.unauthenticatedContext().firestore()
 
 const TOKEN = 'tok_abcdefghijklmnopqrstuvwxyz'
 
-function invite(uid: string) {
-  return { createdBy: uid, createdAt: serverTimestamp(), label: 'for carol', usedBy: null, usedByEmail: null, usedAt: null }
+const DAY = 24 * 60 * 60 * 1000
+
+function invite(uid: string, expiresInDays = 7) {
+  return { createdBy: uid, createdAt: serverTimestamp(), label: 'for carol', expiresAt: Timestamp.fromMillis(Date.now() + expiresInDays * DAY) }
 }
 
-async function redeem(db: ReturnType<typeof alice>, email: string, uid: string, token = TOKEN) {
+async function redeem(db: ReturnType<typeof alice>, email: string, uid: string, token = TOKEN, label = 'for carol') {
   const b = writeBatch(db)
-  b.set(doc(db, 'members', email), { role: 'member', displayName: uid, addedAt: serverTimestamp(), invite: token })
-  b.update(doc(db, 'invites', token), { usedBy: uid, usedByEmail: email, usedAt: serverTimestamp() })
+  b.set(doc(db, 'members', email), { role: 'member', displayName: uid, addedAt: serverTimestamp(), invite: token, inviteLabel: label })
+  b.delete(doc(db, 'invites', token))
   return b.commit()
 }
 
@@ -150,6 +152,64 @@ describe('with admin alice and member bob', () => {
     await assertSucceeds(setDoc(doc(bob(), 'cafes', 'c1'), { ...cafe('bob'), links: ['https://www.tiktok.com/@x/video/1'] }))
     await assertFails(setDoc(doc(bob(), 'cafes', 'c2'), { ...cafe('bob'), links: Array.from({ length: 11 }, (_, i) => `https://x.com/${i}`) }))
     await assertFails(setDoc(doc(bob(), 'cafes', 'c3'), { ...cafe('bob'), links: 'https://x.com' }))
+  })
+
+  it('members rename only themselves, only the name', async () => {
+    await assertSucceeds(updateDoc(doc(bob(), 'members', 'bob@example.com'), { displayName: 'Bobby' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'bob@example.com'), { role: 'admin' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'bob@example.com'), { displayName: '' }))
+    await assertFails(updateDoc(doc(bob(), 'members', 'alice@example.com'), { displayName: 'not alice' }))
+    // Renaming old visits: own visits only.
+    await setDoc(doc(bob(), 'cafes', 'c1'), cafe('bob'))
+    await setDoc(doc(bob(), 'cafes', 'c1', 'visits', 'v1'), visit('bob'))
+    await assertSucceeds(getDocs(query(collectionGroup(bob(), 'visits'), where('uid', '==', 'bob'))))
+    await assertSucceeds(updateDoc(doc(bob(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'Bobby' }))
+    await assertFails(updateDoc(doc(alice(), 'cafes', 'c1', 'visits', 'v1'), { displayName: 'x' }))
+  })
+
+  it('taxonomy is limited to tags and areas', async () => {
+    await assertSucceeds(setDoc(doc(bob(), 'taxonomy', 'tags'), { list: ['coffee', 'brunch'] }))
+    await assertFails(setDoc(doc(bob(), 'taxonomy', 'other'), { list: [] }))
+  })
+
+  it('invite links: admin creates, one person redeems once, link is deleted', async () => {
+    await assertFails(setDoc(doc(bob(), 'invites', TOKEN), invite('bob')))
+    await assertFails(setDoc(doc(alice(), 'invites', 'short'), invite('alice')))
+    await assertFails(setDoc(doc(alice(), 'invites', TOKEN), invite('alice', 60)))
+    await assertSucceeds(setDoc(doc(alice(), 'invites', TOKEN), invite('alice')))
+    await assertSucceeds(getDoc(doc(anon(), 'invites', TOKEN)))
+    await assertFails(getDocs(collection(bob(), 'invites')))
+    await assertSucceeds(getDocs(collection(alice(), 'invites')))
+
+    // Can't join without using up the invite, as admin, or under a fake label.
+    await assertFails(setDoc(doc(carol(), 'members', 'carol@example.com'), { role: 'member', invite: TOKEN, inviteLabel: 'for carol' }))
+    const db = carol()
+    const b = writeBatch(db)
+    b.set(doc(db, 'members', 'carol@example.com'), { role: 'admin', invite: TOKEN, inviteLabel: 'for carol' })
+    b.delete(doc(db, 'invites', TOKEN))
+    await assertFails(b.commit())
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol', TOKEN, 'VIP'))
+    // Can't just delete someone's invite without joining.
+    await assertFails(deleteDoc(doc(carol(), 'invites', TOKEN)))
+    // Unverified email can't redeem.
+    await assertFails(redeem(as('eve', 'eve@example.com', false), 'eve@example.com', 'eve'))
+
+    await assertSucceeds(redeem(carol(), 'carol@example.com', 'carol'))
+    await assertSucceeds(setDoc(doc(carol(), 'cafes', 'c9'), cafe('carol')))
+    // The link is gone, so a second use fails.
+    const gone = await getDoc(doc(anon(), 'invites', TOKEN))
+    if (gone.exists()) throw new Error('invite should be deleted after use')
+    await assertFails(redeem(as('dan', 'dan@example.com'), 'dan@example.com', 'dan'))
+  })
+
+  it('expired, missing or revoked invites cannot be redeemed', async () => {
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol', 'tok_doesnotexist_000000000'))
+    const EXPIRED = 'tok_expired_abcdefghijklmnop'
+    await setDoc(doc(alice(), 'invites', EXPIRED), invite('alice', -1))
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol', EXPIRED))
+    await setDoc(doc(alice(), 'invites', TOKEN), invite('alice'))
+    await assertSucceeds(deleteDoc(doc(alice(), 'invites', TOKEN)))
+    await assertFails(redeem(carol(), 'carol@example.com', 'carol'))
   })
 
   it('members rename only themselves, only the name', async () => {

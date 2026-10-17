@@ -57,6 +57,8 @@ export type Member = {
   role: 'admin' | 'member'
   displayName?: string
   addedAt?: Timestamp
+  /** Label of the invite link they joined with, if any. */
+  inviteLabel?: string
 }
 
 export function average(c: Pick<Cafe, 'visitCount' | 'ratingSum'>): number | null {

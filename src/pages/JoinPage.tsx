@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
-import { getInvite, PENDING_INVITE_KEY, redeemInvite, type Invite } from '../data/invites'
+import { getInvite, isExpired, PENDING_INVITE_KEY, redeemInvite, type Invite } from '../data/invites'
 import { storage } from '../storage'
 import { message, SignInOptions } from './SignInPage'
 
@@ -25,7 +25,7 @@ export function JoinPage() {
 
   // Remember the invite so an email-link sign-in (which lands on the home page) can come back here.
   useEffect(() => {
-    if (invite && !invite.usedBy) storage.set(PENDING_INVITE_KEY, token)
+    if (invite && !isExpired(invite)) storage.set(PENDING_INVITE_KEY, token)
   }, [invite, token])
 
   const done = auth.isMember
@@ -34,11 +34,11 @@ export function JoinPage() {
   }, [done])
 
   async function join() {
-    if (!auth.user?.email) return
+    if (!auth.user?.email || !invite) return
     setBusy(true)
     setError(null)
     try {
-      await redeemInvite(token, auth.user.uid, auth.user.email.toLowerCase(), auth.displayName)
+      await redeemInvite(invite, auth.user.email.toLowerCase(), auth.displayName)
     } catch (err) {
       setError(message(err) || 'Couldn\'t join with this link. It may have just been used.')
       setInvite(await getInvite(token).catch(() => null))
@@ -66,17 +66,17 @@ export function JoinPage() {
     return (
       <Slip>
         <h1>This invite link doesn't work</h1>
-        <p>It may have been revoked, or the link got cut off when it was copied. Ask for a new one.</p>
+        <p>Someone already joined with it, it was revoked, or the link got cut off when it was copied. Each link works once. Ask for a new one.</p>
         <Link to="/">Browse cafes anyway</Link>
       </Slip>
     )
   }
 
-  if (invite.usedBy && invite.usedBy !== auth.user?.uid) {
+  if (isExpired(invite)) {
     return (
       <Slip>
-        <h1>This invite was already used</h1>
-        <p>Each link lets one person join. Ask for a new one.</p>
+        <h1>This invite link expired</h1>
+        <p>Invite links last 7 days. Ask for a new one.</p>
         <Link to="/">Browse cafes anyway</Link>
       </Slip>
     )
