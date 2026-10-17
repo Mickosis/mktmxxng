@@ -43,7 +43,7 @@ npx wrangler login      # once
 npx wrangler deploy
 ```
 
-Put the `https://mktmxxng-preview.<you>.workers.dev` URL in `src/config.ts` (or `VITE_PREVIEW_URL`). Run it locally with `npx wrangler dev --port 8787` and `VITE_PREVIEW_URL=http://localhost:8787 npm run dev`.
+It is deployed at `https://mktmxxng-preview.mickosis.workers.dev`, set as the default in `src/config.ts` (override with `VITE_PREVIEW_URL`). Run it locally with `npx wrangler dev --port 8787` and `VITE_PREVIEW_URL=http://localhost:8787 npm run dev`.
 
 Caption parser tests: `npm test`.
 
