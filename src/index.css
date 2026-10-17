@@ -442,73 +442,64 @@ textarea {
   font-size: var(--step-0);
 }
 
-/* ---------- Stamps (tags) ---------- */
+/* ---------- Tags ---------- */
 
 .stamp-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 10px;
+  gap: 6px;
 }
 
+/* Printed tags: reverse-printed like the emphasis lines on a thermal receipt. */
 .stamp {
-  --ink-bleed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='70'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3.2 2.75'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 2px 11px;
-  border: 2.5px solid currentColor;
-  border-radius: 5px;
+  gap: 6px;
   font-family: var(--font-ui);
-  font-stretch: 100%;
-  font-weight: 700;
+  font-stretch: 87.5%;
+  font-weight: 600;
   font-size: var(--step--1);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   text-transform: lowercase;
-  background: transparent;
-  color: var(--ink-soft);
-  border-style: dashed;
-  rotate: 0deg;
-  cursor: pointer;
-  transition: rotate 160ms ease-out, color 120ms;
-}
-
-.stamp-sm {
-  min-height: 26px;
-  padding: 0 8px;
-  border-width: 2px;
-}
-
-.stamp[aria-pressed='true'],
-.stamp[data-on='true'] {
-  color: var(--stamp);
-  border-style: solid;
-  rotate: var(--tilt);
-  mask: var(--ink-bleed);
-}
-
-.stamp[aria-pressed='true'] {
-  animation: thunk 180ms ease-out;
+  line-height: 1;
+  border-radius: 2px;
 }
 
 span.stamp {
-  cursor: default;
+  padding: 5px 7px 6px;
+  background: var(--ink);
+  color: var(--paper);
 }
 
-@keyframes thunk {
-  0% {
-    scale: 1.18;
-  }
-  100% {
-    scale: 1;
-  }
+/* Toggles (filters, cafe form): outlined when off, filled in ink when on. */
+button.stamp {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms, border-color 120ms;
+}
+
+button.stamp:hover {
+  border-color: var(--ink);
+}
+
+button.stamp[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+button.stamp[aria-pressed='true']::before {
+  content: '✓';
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stamp {
+  button.stamp {
     transition: none;
-  }
-  .stamp[aria-pressed='true'] {
-    animation: none;
   }
 }
 
