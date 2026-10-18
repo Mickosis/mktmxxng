@@ -74,8 +74,10 @@ type Place = {
   lng: number | null
   /** House number and street, from OpenStreetMap. */
   street: string | null
-  /** Village or district, e.g. Legazpi Village or Poblacion. */
+  /** Barangay or district, e.g. Poblacion or Pio del Pilar. */
   area: string | null
+  /** Every OpenStreetMap area name around the pin, smallest first, for matching against known areas. */
+  areas: string[]
   city: string | null
 }
 
@@ -105,21 +107,26 @@ function coordsOf(url: URL): [number, number] | null {
 }
 
 /** Street and village for a pin, from OpenStreetMap's free reverse geocoder. */
-async function reverseGeocode(lat: number, lng: number): Promise<Pick<Place, 'street' | 'area' | 'city'>> {
+const NO_GEOCODE = { street: null, area: null, areas: [], city: null }
+
+async function reverseGeocode(lat: number, lng: number): Promise<Pick<Place, 'street' | 'area' | 'areas' | 'city'>> {
   const res = await fetch(
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
     { headers: { 'User-Agent': GEOCODER_UA } },
   )
-  if (!res.ok) return { street: null, area: null, city: null }
+  if (!res.ok) return NO_GEOCODE
   const { address: a = {} } = (await res.json()) as { address?: Record<string, string> }
   const street = [a.house_number, a.road].filter(Boolean).join(' ') || null
-  return { street, area: a.neighbourhood || a.quarter || a.suburb || null, city: a.city || a.town || null }
+  const areas = [a.neighbourhood, a.quarter, a.suburb].filter((x): x is string => !!x)
+  // The barangay (quarter) beats a neighbourhood, which is often a tiny subdivision like "Kayamanan A".
+  return { street, area: a.quarter || a.suburb || a.neighbourhood || null, areas, city: a.city || a.town || null }
 }
 
 async function place(url: URL): Promise<Place> {
   const full = await resolveMaps(url)
   const coords = coordsOf(full)
-  const found = coords ? await reverseGeocode(...coords) : { street: null, area: null, city: null }
+  // Google's own place page would have the full address, but it answers Cloudflare with a 429.
+  const found = coords ? await reverseGeocode(...coords) : NO_GEOCODE
   return { url: full.toString(), lat: coords?.[0] ?? null, lng: coords?.[1] ?? null, ...found }
 }
 
@@ -203,9 +210,12 @@ async function tiktok(url: URL): Promise<Preview> {
 }
 
 function meta(html: string, property: string): string | null {
-  const re = new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`, 'i')
-  const alt = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${property}["']`, 'i')
-  const raw = re.exec(html)?.[1] ?? alt.exec(html)?.[1]
+  // The value is read up to its own closing quote, so "King's Court" survives inside double quotes.
+  const value = `content=(?:"([^"]*)"|'([^']*)')`
+  const re = new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]*${value}`, 'i')
+  const alt = new RegExp(`<meta[^>]+${value}[^>]*(?:property|name)=["']${property}["']`, 'i')
+  const m = re.exec(html) ?? alt.exec(html)
+  const raw = m?.[1] ?? m?.[2]
   return raw ? decode(raw) : null
 }
 
@@ -279,7 +289,8 @@ export default {
       }
       if (!isMapsHost(target)) return json({ error: 'Only Google Maps and Apple Maps links are supported.' }, 400, origin)
       // Places don't move, so cache longer; this also keeps us well inside OpenStreetMap's rate limit.
-      const key = new Request(`https://preview.cache/place/${encodeURIComponent(target.toString())}`)
+      // v2: answers gained areas.
+      const key = new Request(`https://preview.cache/place/v2/${encodeURIComponent(target.toString())}`)
       const hit = await caches.default.match(key)
       if (hit) return new Response(await hit.text(), { headers: { 'Content-Type': 'application/json', ...cors(origin) } })
       try {
@@ -289,7 +300,7 @@ export default {
         }
         return json(found, 200, origin, found.lat != null)
       } catch {
-        return json({ url: target.toString(), lat: null, lng: null, street: null, area: null, city: null }, 200, origin)
+        return json({ url: target.toString(), lat: null, lng: null, ...NO_GEOCODE }, 200, origin)
       }
     }
     if (request.method !== 'GET' || pathname !== '/preview') return json({ error: 'Not found' }, 404, origin)

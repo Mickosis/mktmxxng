@@ -22,7 +22,11 @@ const TAG_WORDS: Record<string, string[]> = {
 const WORK_WORDS: Record<WorkFlag, string[]> = {
   wifi: ['wifi', 'wi-fi'],
   outlets: ['outlet', 'outlets', 'sockets'],
-  laptop: ['laptop friendly', 'laptop-friendly', 'work friendly', 'work-friendly', 'study spot', 'workspace', 'wfh', 'wfc'],
+  laptop: [
+    'laptop friendly', 'laptop-friendly', 'work friendly', 'work-friendly', 'study spot', 'workspace', 'wfh', 'wfc',
+    'productive', 'study', 'studying', 'stay long', 'stay for a long time', 'staying for a long time', 'work from',
+    'working from', 'remote work',
+  ],
 }
 
 const PET_WORDS = ['pet friendly', 'pet-friendly', 'petfriendly', 'dog friendly', 'dog-friendly', 'dogfriendly', 'pets allowed', 'fur babies', 'furbabies']
@@ -47,7 +51,13 @@ const MAKATI_AREAS: [string, string[]][] = [
   ['Guadalupe', ['guadalupe']],
 ]
 
-const PIN = /(?:📍|📌|🏠|\b(?:location|where|place|address)\s*[:：])\s*([^\n#|]+)/i
+const PIN = /(?:📍|📌|🏠|\b(?:location|where|place|address)\s*[:：])\s*([^\n#|📍📌]+)/iu
+// The pin line ends at a double space or the end of a sentence, so the caption's next sentence isn't read as the name.
+// Abbreviations like "St." and "Bldg." don't end it.
+const PIN_END = /\s{2,}|[!?](?:\s|$)|(?<!\b(?:st|ave|rd|bldg|blvd|cor|no|brgy|flr|ft|mt|sta|sen|gen|pres|dr|jr|sr|blk|sto))\.(?:\s|$)/i
+const PIN_HANDLE = /^@([a-z0-9._]{2,30})/i
+// Handles that read like a business rather than a friend.
+const SHOP_WORDS = /cafe|coffee|kape|matcha|tea|bakery|bakeshop|bake|pastry|patisserie|kitchen|bar|bistro|brew|roast|eatery|resto|\.co\b|_co\b/i
 const STREET = /\d|\b(st|st\.|street|ave|ave\.|avenue|road|rd|blvd|bldg|building|tower|center|centre|ground floor|g\/f|floor|corner|cor\.)\b/i
 const MENTION = /(^|[^\w.])@([a-z0-9._]{2,30})/gi
 
@@ -123,23 +133,39 @@ export function parseCaption(text: string, opts: { tags: string[]; areas: string
   result.petFriendly = PET_WORDS.some((p) => has(caption, p))
   result.area = findArea(caption, opts.areas)
 
-  const pin = PIN.exec(caption)?.[1]
+  const author = opts.author?.replace(/^@/, '').toLowerCase()
+  let pinned: string | undefined
+  const pin = PIN.exec(caption)?.[1]?.split(PIN_END)[0]
   if (pin) {
-    const parts = pin.split(/,|\s[-–—]\s|\s\|\s/).map(tidy).filter(Boolean)
+    // "📍@ujisan.matcha" names the place by its account.
+    const handle = PIN_HANDLE.exec(pin.trim())?.[1]?.replace(/\.$/, '')
+    if (handle) {
+      pinned = handle.toLowerCase()
+      result.name = nameFromHandle(handle)
+    }
+    const rest = handle ? pin.trim().slice(handle.length + 1) : pin
+    const parts = rest.split(/,|\s[-–—]\s|\s\|\s/).map(tidy).filter(Boolean)
     const isPlace = (p: string) => /^makati( city)?$/i.test(p) || findArea(p, opts.areas)?.toLowerCase() === p.toLowerCase()
-    const first = parts[0]
-    if (first && !isPlace(first)) result.name = first
-    const address = parts.slice(first && !isPlace(first) ? 1 : 0).filter((p) => STREET.test(p))
+    // A long run of words with no comma is a sentence, not a name.
+    const first = !handle && parts[0] && parts[0].length <= 60 && !isPlace(parts[0]) ? parts[0] : undefined
+    if (first) result.name = first
+    const address = parts.slice(first ? 1 : 0).filter((p) => STREET.test(p) && p.length <= 80)
     if (address.length) result.address = address.join(', ')
   }
 
-  const author = opts.author?.replace(/^@/, '').toLowerCase()
   const mentions = new Set<string>()
   for (const m of caption.matchAll(MENTION)) {
     const handle = m[2].replace(/\.$/, '')
-    if (handle.toLowerCase() !== author) mentions.add(handle)
+    const lower = handle.toLowerCase()
+    if (lower !== author && lower !== pinned) mentions.add(handle)
   }
   result.mentions = [...mentions].slice(0, 5)
+
+  // With no pin, a single shop-like account tagged in the caption is most likely the place.
+  if (!result.name && result.mentions.length === 1 && SHOP_WORDS.test(result.mentions[0])) {
+    result.name = nameFromHandle(result.mentions[0])
+    result.mentions = []
+  }
 
   return result
 }

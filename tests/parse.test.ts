@@ -2,11 +2,38 @@ import { describe, expect, it } from 'vitest'
 import { nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
 import { cleanLink, handleOf, isProfile, sameLink } from '../src/prefill/preview'
 import { publicName, shortName } from '../src/types'
-import { cleanMapsLink, isMapsLink, placeFromUrl, placePrefill } from '../src/prefill/maps'
+import { cleanMapsLink, isMapsLink, placeFromShareText, placeFromUrl, placePrefill } from '../src/prefill/maps'
 
 const opts = { tags: ['coffee', 'matcha', 'pastries', 'restaurant', 'brunch'], areas: ['Legazpi Village', 'Poblacion'] }
 
 describe('parseCaption', () => {
+  it('takes the name from a pinned account and stops the pin at the sentence', () => {
+    const r = parseCaption(
+      "Sharing another introvert friendly-cafe in Makati where you can be productive! 📍@ujisan.matcha  I know how hard it is to find cafes that aren't overstimulating (and one where staying for a long time is ok) but I found one and the vibe is *chefs kiss* Lmk your thoughts if you decide to go 🙆🏻‍♀️ #introvertproblems",
+      { ...opts, author: '@notharaya' },
+    )
+    expect(r.name).toBe('Ujisan Matcha')
+    expect(r.tags).toEqual(['matcha'])
+    expect(r.work).toEqual(['laptop'])
+    expect(r.mentions).toEqual([])
+    expect(r.address).toBeUndefined()
+  })
+
+  it('reads area after a pinned account', () => {
+    const r = parseCaption('new fave 📍 @kumo.coffee, Legazpi Village', opts)
+    expect(r).toMatchObject({ name: 'Kumo Coffee', area: 'Legazpi Village', mentions: [] })
+  })
+
+  it("doesn't take a long pinned sentence as the name", () => {
+    const r = parseCaption('📍 this little place hidden behind the office towers that nobody ever talks about', opts)
+    expect(r.name).toBeUndefined()
+  })
+
+  it('names the place after a single shop-like tag when there is no pin', () => {
+    expect(parseCaption('quiet spot for working @kumo.coffee ☕', opts).name).toBe('Kumo Coffee')
+    expect(parseCaption('with @bestfriend at the new place', opts).name).toBeUndefined()
+  })
+
   it('reads a pin line with name, address and area', () => {
     const r = parseCaption(
       'Best ceremonial usucha in Makati 🍵\n📍 Matcha Saru, G/F Grepalife Bldg, 221 Sen. Gil Puyat Ave, Salcedo Village\n#matcha #makaticafe',
@@ -145,5 +172,29 @@ describe('maps links', () => {
     expect(p).toMatchObject({ name: 'Kumo Coffee', address: 'Rada Street', area: 'Legazpi Village', tags: ['coffee'] })
     // Without the helper, the URL alone still gives the name.
     expect(placePrefill('https://www.google.com/maps/place/Matcha+Saru/@1,2,17z', null, opts)).toMatchObject({ name: 'Matcha Saru', tags: ['matcha'] })
+  })
+
+  it('uses the address shared with the link, and OSM areas when there is none', () => {
+    const place = {
+      url: 'https://www.google.com/maps/place/Ujisan+-+Makati/@14.5582666,121.0104817,17z/data=!3d14.5582666!4d121.0130566',
+      lat: 14.5582666,
+      lng: 121.0130566,
+      street: 'Dela Rosa Street',
+      area: 'Pio del Pilar',
+      areas: ['Kayamanan A', 'Pio del Pilar'],
+      city: 'Makati',
+    }
+    const link = 'https://maps.app.goo.gl/Mv3GQ3rAtDvW4UWv8'
+    const text = `Ujisan - Makati\nBldg 2, King's Court, 2129 Chino Roces Ave, Legaspi Village, Makati City, 1229 Metro Manila\n${link}`
+    expect(placeFromShareText(text, link)).toEqual({ name: 'Ujisan - Makati', address: "Bldg 2, King's Court, 2129 Chino Roces Ave, Legaspi Village, Makati City, 1229 Metro Manila" })
+    expect(placeFromShareText(`Ujisan - Makati · Bldg 2, King's Court, 2129 Chino Roces Ave ${link}`, link)).toEqual({ name: 'Ujisan - Makati', address: "Bldg 2, King's Court, 2129 Chino Roces Ave" })
+    expect(placeFromShareText(link, link)).toEqual({})
+    expect(placePrefill(link, place, opts, placeFromShareText(text, link))).toMatchObject({
+      name: 'Ujisan - Makati',
+      address: "Bldg 2, King's Court, 2129 Chino Roces Ave",
+      area: 'Legazpi Village',
+    })
+    // Link alone: the barangay beats the tiny subdivision.
+    expect(placePrefill(link, place, opts)).toMatchObject({ address: 'Dela Rosa Street', area: 'Pio del Pilar' })
   })
 })

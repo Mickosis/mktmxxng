@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCafes } from '../data/cafes'
 import { nameFromHandle, parseCaption, profileName, type Prefill } from '../prefill/parse'
 import { cleanLink, fetchPreview, findUrl, handleOf, isProfile, platformOf, PLATFORM_NAMES, sameLink, type Preview } from '../prefill/preview'
-import { cleanMapsLink, fetchPlace, isMapsLink, placePrefill } from '../prefill/maps'
+import { cleanMapsLink, fetchPlace, isMapsLink, placeFromShareText, placePrefill } from '../prefill/maps'
 import type { Cafe } from '../types'
 
 type Props = {
@@ -57,7 +57,7 @@ export function QuickAdd({ onPrefill, onLink, onMapsUrl }: Props) {
     setState({ step: 'done', preview, filled, mentions: parsed.mentions })
   }
 
-  async function fromMaps(link: string) {
+  async function fromMaps(link: string, input: string) {
     const url = cleanMapsLink(link)
     const dupe = cafes.find((c) => c.mapsUrl && sameMapsLink(c.mapsUrl, url))
     if (dupe) {
@@ -67,7 +67,7 @@ export function QuickAdd({ onPrefill, onLink, onMapsUrl }: Props) {
     onMapsUrl(url)
     setState({ step: 'reading', url })
     const place = await fetchPlace(url)
-    const filled = onPrefill(placePrefill(url, place, { tags, areas }))
+    const filled = onPrefill(placePrefill(url, place, { tags, areas }, placeFromShareText(input, link)))
     setState({ step: 'place', filled })
   }
 
@@ -82,7 +82,7 @@ export function QuickAdd({ onPrefill, onLink, onMapsUrl }: Props) {
       return
     }
     if (isMapsLink(found)) {
-      await fromMaps(found)
+      await fromMaps(found, input)
       return
     }
     if (!platformOf(url)) {
