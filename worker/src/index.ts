@@ -8,6 +8,9 @@ const HOSTS: Record<string, Platform> = {
   'tiktok.com': 'tiktok',
   'vm.tiktok.com': 'tiktok',
   'vt.tiktok.com': 'tiktok',
+  // Older short links land on these before (or instead of) www.tiktok.com.
+  'm.tiktok.com': 'tiktok',
+  't.tiktok.com': 'tiktok',
   'instagram.com': 'instagram',
   'facebook.com': 'facebook',
   'm.facebook.com': 'facebook',
@@ -159,24 +162,41 @@ function blank(platform: Platform, url: URL): Preview {
   return { platform, kind: isProfile(platform, url) ? 'profile' : 'post', url: url.toString(), caption: null, author: null, name: null, thumbnail: null }
 }
 
+/**
+ * Post id, account and post type from any of the shapes a share link resolves to:
+ * /@kumo/video/123, /@/photo/123 (handle left out), m.tiktok.com/v/123.html, /i18n/share/video/123.
+ */
+function tiktokPost(url: URL): { id: string; handle: string; photo: boolean } | null {
+  const m = url.pathname.match(/\/(video|photo|v)\/(\d{15,})/)
+  if (!m) return null
+  return { id: m[2], handle: url.pathname.match(/^\/@([^/]*)\//)?.[1] ?? '', photo: m[1] === 'photo' }
+}
+
 async function tiktok(url: URL): Promise<Preview> {
   const isShort = url.hostname !== 'www.tiktok.com' && url.hostname !== 'tiktok.com'
   const full = isShort || url.pathname.startsWith('/t/') ? await resolve(url) : url
   const empty = blank('tiktok', full)
-  // oEmbed also answers for profile links, with the display name but no bio.
-  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(full.toString())}`
+  const post = tiktokPost(full)
+  // oEmbed turns down /photo/ (slideshow) links and empty or odd handles, but takes any post id
+  // as /@<anything>/video/<id>. Profile links go as they are: the display name, no bio.
+  const asked = post ? `https://www.tiktok.com/@${post.handle || '_'}/video/${post.id}` : full.toString()
+  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(asked)}`
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(endpoint, { headers: { 'User-Agent': BROWSER_UA } })
-    if (res.ok) {
-      const data = (await res.json()) as { title?: string; author_name?: string; author_url?: string; thumbnail_url?: string }
+    // Under load it can also answer 200 with a plain-text "overload-protect triggered".
+    const data = res.ok
+      ? ((await res.json().catch(() => null)) as { title?: string; author_name?: string; author_url?: string; thumbnail_url?: string } | null)
+      : null
+    if (data) {
       const handle = data.author_url?.split('/@')[1]
       const author = handle ? `@${handle}` : data.author_name || null
-      return empty.kind === 'profile'
-        ? { ...empty, author, name: data.author_name || null }
-        : { ...empty, caption: data.title || null, author, thumbnail: data.thumbnail_url || null }
+      if (empty.kind === 'profile') return { ...empty, author, name: data.author_name || null }
+      // Save a link that opens the post directly, with the account filled back in.
+      const link = post && handle ? `https://www.tiktok.com/@${handle}/${post.photo ? 'photo' : 'video'}/${post.id}` : empty.url
+      return { ...empty, url: link, caption: data.title || null, author, thumbnail: data.thumbnail_url || null }
     }
     // TikTok sheds load with 503 "overload-protect"; a short wait usually clears it.
-    if (res.status !== 503) break
+    if (!res.ok && res.status !== 503) break
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
   }
   return empty

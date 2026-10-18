@@ -18,6 +18,8 @@ const HOSTS: Record<string, Platform> = {
   'tiktok.com': 'tiktok',
   'vm.tiktok.com': 'tiktok',
   'vt.tiktok.com': 'tiktok',
+  'm.tiktok.com': 'tiktok',
+  't.tiktok.com': 'tiktok',
   'instagram.com': 'instagram',
   'facebook.com': 'facebook',
   'm.facebook.com': 'facebook',
@@ -108,13 +110,18 @@ async function getJson<T>(url: string): Promise<T | null> {
   }
 }
 
-/** TikTok's public oEmbed answers browsers directly, but only for full /@user/video/ and /@user links. */
+/**
+ * TikTok's public oEmbed answers browsers directly, but only for full /@user/video/ and /@user links.
+ * Slideshow (/photo/) links go in as /video/ with the same id, which oEmbed does take.
+ */
 async function tiktokDirect(url: string): Promise<Preview | null> {
   if (platformOf(url) !== 'tiktok') return null
   const profile = isProfile(url)
-  if (!profile &&!/tiktok\.com\/@[^/]*\/video\/\d+/.test(url)) return null
+  const post = url.match(/tiktok\.com\/@([^/]*)\/(?:video|photo)\/(\d+)/)
+  if (!profile && !post) return null
+  const asked = post ? `https://www.tiktok.com/@${post[1] || '_'}/video/${post[2]}` : url
   const data = await getJson<{ title?: string; author_url?: string; author_name?: string; thumbnail_url?: string }>(
-    `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+    `https://www.tiktok.com/oembed?url=${encodeURIComponent(asked)}`,
   )
   if (!data) return null
   const handle = data.author_url?.split('/@')[1]
