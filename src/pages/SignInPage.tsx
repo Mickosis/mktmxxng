@@ -74,6 +74,7 @@ export function SignInPage() {
           {auth.isAdmin && <Link className="btn" to="/members">Manage members</Link>}
           <button className="btn" onClick={() => run(auth.signOut)}>Sign out</button>
         </div>
+        <p className="muted small">Version {__BUILD__}</p>
       </Slip>
     )
   }

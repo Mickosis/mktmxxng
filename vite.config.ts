@@ -6,6 +6,8 @@ export default defineConfig({
   base: '/mktmxxng/',
   // Firebase SDK is most of the bundle; it is precached by the service worker after first load.
   build: { chunkSizeWarningLimit: 1200 },
+  // Shown on the account page so it's easy to tell whether a phone has picked up the latest deploy.
+  define: { __BUILD__: JSON.stringify((process.env.GITHUB_SHA ?? 'dev').slice(0, 7)) },
   plugins: [
     react(),
     VitePWA({
