@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCafes } from '../data/cafes'
 import { nameFromHandle, parseCaption, profileName, type Prefill } from '../prefill/parse'
 import { cleanLink, fetchPreview, findUrl, handleOf, isProfile, platformOf, PLATFORM_NAMES, sameLink, type Preview } from '../prefill/preview'
-import { cleanMapsLink, fetchPlace, isMapsLink, placeFromShareText, placePrefill } from '../prefill/maps'
+import { cleanMapsLink, fetchPlace, isMapsLink, isShortMapsLink, placeFromShareText, placeIdOf, placePrefill } from '../prefill/maps'
 import type { Cafe } from '../types'
 
 type Props = {
@@ -64,11 +64,31 @@ export function QuickAdd({ onPrefill, onLink, onMapsUrl }: Props) {
       setState({ step: 'duplicate', cafe: dupe, url })
       return
     }
-    onMapsUrl(url)
     setState({ step: 'reading', url })
     const place = await fetchPlace(url)
+    // Every share makes a new short link, so match on the place behind it.
+    const id = place && placeIdOf(place.url)
+    const same = id ? await findByPlaceId(id) : undefined
+    if (same) {
+      setState({ step: 'duplicate', cafe: same, url })
+      return
+    }
+    // Keep the full link: it carries the place id, so later shares of the same place are caught.
+    onMapsUrl(id ? cleanMapsLink(place.url) : url)
     const filled = onPrefill(placePrefill(url, place, { tags, areas }, placeFromShareText(input, link)))
     setState({ step: 'place', filled })
+  }
+
+  /** The cafe pinned to this Google place, resolving any older short links on file (the helper caches them). */
+  async function findByPlaceId(id: string): Promise<Cafe | undefined> {
+    const direct = cafes.find((c) => c.mapsUrl && placeIdOf(c.mapsUrl) === id)
+    if (direct) return direct
+    const short = cafes.filter((c) => c.mapsUrl && isShortMapsLink(c.mapsUrl))
+    const resolved = await Promise.all(short.map((c) => fetchPlace(c.mapsUrl)))
+    return short.find((_, i) => {
+      const r = resolved[i]
+      return r ? placeIdOf(r.url) === id : false
+    })
   }
 
   async function handle(raw: string) {

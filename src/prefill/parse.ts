@@ -49,7 +49,12 @@ const MAKATI_AREAS: [string, string[]][] = [
   ['Dasmariñas Village', ['dasmariñas village', 'dasmarinas village', 'dasmariñas', 'dasmarinas', 'dasma']],
   ['San Lorenzo Village', ['san lorenzo village', 'san lorenzo']],
   ['Guadalupe', ['guadalupe']],
+  // Pio del Pilar is the barangay along the Chino Roces (Pasong Tamo) strip; people call it by the road.
+  ['Chino Roces', ['chino roces', 'pasong tamo', 'pio del pilar']],
 ]
+
+// Areas named after a road. A village in the same text wins: "2129 Chino Roces Ave, Legaspi Village" is Legazpi Village.
+const CORRIDORS = new Set(['chino roces', 'pasong tamo'])
 
 const PIN = /(?:📍|📌|🏠|\b(?:location|where|place|address)\s*[:：])\s*([^\n#|📍📌]+)/iu
 // The pin line ends at a double space or the end of a sentence, so the caption's next sentence isn't read as the name.
@@ -82,11 +87,14 @@ function inHashtag(text: string, word: string): boolean {
 
 /** The Makati area a piece of text mentions, spelled the way the list already spells it. */
 export function findArea(text: string, known: string[]): string | undefined {
-  // Areas already on file win, so the caption maps onto the spelling the list uses.
-  for (const a of known) if (has(text, a)) return a
-  for (const [canonical, aliases] of MAKATI_AREAS) {
-    if (aliases.some((alias) => has(text, alias))) {
-      return known.find((k) => k.toLowerCase() === canonical.toLowerCase()) ?? canonical
+  for (const corridor of [false, true]) {
+    const fits = (area: string) => CORRIDORS.has(area.toLowerCase()) === corridor
+    // Areas already on file win, so the caption maps onto the spelling the list uses.
+    for (const a of known) if (fits(a) && has(text, a)) return a
+    for (const [canonical, aliases] of MAKATI_AREAS) {
+      if (fits(canonical) && aliases.some((alias) => has(text, alias))) {
+        return known.find((k) => k.toLowerCase() === canonical.toLowerCase()) ?? canonical
+      }
     }
   }
   return undefined

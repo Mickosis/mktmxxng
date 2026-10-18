@@ -33,6 +33,20 @@ export function cleanMapsLink(url: string): string {
   }
 }
 
+/**
+ * Google's id for the place itself (0x…:0x…), the same whichever share link led to it. Full place
+ * links carry it as !1s0x…:0x… in the path, older ones as ?ftid=. Null for short and Apple links.
+ */
+export function placeIdOf(url: string): string | null {
+  try {
+    const u = new URL(url)
+    const id = decodeURIComponent(u.pathname).match(/!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i)?.[1] ?? u.searchParams.get('ftid')
+    return id && /^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(id) ? id.toLowerCase() : null
+  } catch {
+    return null
+  }
+}
+
 export function isShortMapsLink(url: string): boolean {
   try {
     return SHORT_HOSTS.has(new URL(url).hostname)

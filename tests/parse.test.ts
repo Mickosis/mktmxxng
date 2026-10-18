@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
+import { findArea, nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
 import { cleanLink, handleOf, isProfile, sameLink } from '../src/prefill/preview'
 import { publicName, shortName } from '../src/types'
-import { cleanMapsLink, isMapsLink, placeFromShareText, placeFromUrl, placePrefill } from '../src/prefill/maps'
+import { cleanMapsLink, isMapsLink, placeFromShareText, placeFromUrl, placeIdOf, placePrefill } from '../src/prefill/maps'
 
 const opts = { tags: ['coffee', 'matcha', 'pastries', 'restaurant', 'brunch'], areas: ['Legazpi Village', 'Poblacion'] }
 
@@ -194,7 +194,26 @@ describe('maps links', () => {
       address: "Bldg 2, King's Court, 2129 Chino Roces Ave",
       area: 'Legazpi Village',
     })
-    // Link alone: the barangay beats the tiny subdivision.
-    expect(placePrefill(link, place, opts)).toMatchObject({ address: 'Dela Rosa Street', area: 'Pio del Pilar' })
+    // Link alone: Pio del Pilar, the barangay along the strip, goes by the road's name.
+    expect(placePrefill(link, place, opts)).toMatchObject({ address: 'Dela Rosa Street', area: 'Chino Roces' })
+  })
+
+  it('finds the same place behind different share links', () => {
+    const a = 'https://www.google.com/maps/place/Ujisan+-+Makati/@14.5582666,121.0104817,17z/data=!3m1!4b1!4m6!3m5!1s0x3397c953f558e119:0x9503bbb072307c6d!8m2!3d14.5582666!4d121.0130566?entry=tts&skid=a'
+    expect(placeIdOf(a)).toBe('0x3397c953f558e119:0x9503bbb072307c6d')
+    expect(placeIdOf(cleanMapsLink(a))).toBe('0x3397c953f558e119:0x9503bbb072307c6d')
+    expect(placeIdOf('https://maps.google.com/?q=Kumo&ftid=0x1a:0x2b')).toBe('0x1a:0x2b')
+    expect(placeIdOf('https://maps.app.goo.gl/Mv3GQ3rAtDvW4UWv8')).toBeNull()
+  })
+})
+
+describe('findArea', () => {
+  it('uses the names people use, villages before roads', () => {
+    const known = ['Chino Roces', 'Legazpi Village', 'Salcedo']
+    expect(findArea("2129 Chino Roces Ave, Legaspi Village, Makati City", known)).toBe('Legazpi Village')
+    expect(findArea('Twenty-third, 2316 Chino Roces Ave', known)).toBe('Chino Roces')
+    expect(findArea('Pio del Pilar', known)).toBe('Chino Roces')
+    expect(findArea('Pasong Tamo', [])).toBe('Chino Roces')
+    expect(findArea('Salcedo Village', known)).toBe('Salcedo')
   })
 })
