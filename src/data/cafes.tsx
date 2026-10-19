@@ -13,14 +13,17 @@ import {
 } from 'firebase/firestore'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { db } from '../firebase'
-import { DEFAULT_TAGS, isHttpUrl, type Cafe, type CafeInput } from '../types'
+import { DEFAULT_AREAS, DEFAULT_TAGS, isHttpUrl, type Cafe, type CafeInput } from '../types'
 
 type CafesState = {
   cafes: Cafe[]
   loading: boolean
   error: string | null
   tags: string[]
+  /** Every area to offer when adding: the presets in their own order, then any others on file. */
   areas: string[]
+  /** Only areas some cafe is in, same order; for filtering. */
+  usedAreas: string[]
   byId: (id: string) => Cafe | undefined
 }
 
@@ -30,12 +33,18 @@ function sortedUnique(list: string[]): string[] {
   return [...new Set(list.map((s) => s.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
 }
 
+/** Presets first, busiest to quietest, then the rest alphabetically. */
+function orderAreas(list: string[], withPresets: boolean): string[] {
+  const all = new Set(sortedUnique(list))
+  const presets = DEFAULT_AREAS.filter((a) => withPresets || all.has(a))
+  return [...presets, ...[...all].filter((a) => !DEFAULT_AREAS.includes(a))]
+}
+
 export function CafesProvider({ children }: { children: ReactNode }) {
   const [cafes, setCafes] = useState<Cafe[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tagDoc, setTagDoc] = useState<string[]>([])
-  const [areaDoc, setAreaDoc] = useState<string[]>([])
 
   useEffect(() => onSnapshot(
     collection(db, 'cafes'),
@@ -51,7 +60,6 @@ export function CafesProvider({ children }: { children: ReactNode }) {
   ), [])
 
   useEffect(() => onSnapshot(doc(db, 'taxonomy', 'tags'), (s) => setTagDoc(s.data()?.list ?? [])), [])
-  useEffect(() => onSnapshot(doc(db, 'taxonomy', 'areas'), (s) => setAreaDoc(s.data()?.list ?? [])), [])
 
   const value = useMemo<CafesState>(() => {
     const map = new Map(cafes.map((c) => [c.id, c]))
@@ -61,10 +69,12 @@ export function CafesProvider({ children }: { children: ReactNode }) {
       error,
       // Union with what cafes actually use, so the lists stay right even if taxonomy lags.
       tags: sortedUnique([...DEFAULT_TAGS, ...tagDoc, ...cafes.flatMap((c) => c.tags)]),
-      areas: sortedUnique([...areaDoc, ...cafes.map((c) => c.area)]),
+      // Presets plus what cafes use; the taxonomy doc can hold stale spellings from edited cafes.
+      areas: orderAreas(cafes.map((c) => c.area), true),
+      usedAreas: orderAreas(cafes.map((c) => c.area), false),
       byId: (id) => map.get(id),
     }
-  }, [cafes, loading, error, tagDoc, areaDoc])
+  }, [cafes, loading, error, tagDoc])
 
   return <CafesContext.Provider value={value}>{children}</CafesContext.Provider>
 }
@@ -90,11 +100,9 @@ function clean(input: CafeInput): CafeInput {
   }
 }
 
+// Areas come from the presets and the cafes themselves, so only tags need remembering.
 async function remember(data: CafeInput) {
-  await Promise.all([
-    setDoc(doc(db, 'taxonomy', 'tags'), { list: arrayUnion(...data.tags) }, { merge: true }),
-    setDoc(doc(db, 'taxonomy', 'areas'), { list: arrayUnion(data.area) }, { merge: true }),
-  ])
+  await setDoc(doc(db, 'taxonomy', 'tags'), { list: arrayUnion(...data.tags) }, { merge: true })
 }
 
 export async function createCafe(input: CafeInput, uid: string): Promise<string> {

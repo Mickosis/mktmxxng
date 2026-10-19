@@ -482,6 +482,11 @@ button.stamp {
   transition: background-color 120ms, color 120ms, border-color 120ms;
 }
 
+/* Place names keep their capitals. */
+.places .stamp {
+  text-transform: none;
+}
+
 button.stamp:hover {
   border-color: var(--ink);
 }

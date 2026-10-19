@@ -63,6 +63,7 @@ function CafeFormInner({ id }: { id?: string }) {
   const [newLink, setNewLink] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [otherArea, setOtherArea] = useState(false)
 
   if (!isMember || !user) {
     return (
@@ -82,6 +83,8 @@ function CafeFormInner({ id }: { id?: string }) {
   }
 
   const set = (patch: Partial<CafeInput>) => setForm((f) => ({ ...f, ...patch }))
+  // "Other…" is open when picked, or when the area (typed, pre-filled or on file) isn't one of the picks.
+  const customArea = otherArea || (!!form.area && !areas.includes(form.area))
   const allTags = [...new Set([...tags, ...form.tags])].sort()
   const duplicate = cafes.find((c) => c.id !== id && c.nameLower === form.name.trim().toLowerCase() && c.area === form.area.trim())
 
@@ -185,20 +188,43 @@ function CafeFormInner({ id }: { id?: string }) {
           </div>
         </fieldset>
 
-        <label className="field">
-          <span>Area</span>
-          <input
-            required
-            list="area-options"
-            value={form.area}
-            onChange={(e) => set({ area: e.target.value })}
-            placeholder="e.g. Legazpi Village"
-            autoComplete="off"
-          />
-          <datalist id="area-options">
-            {areas.map((a) => <option key={a} value={a} />)}
-          </datalist>
-        </label>
+        <fieldset>
+          <legend>Area</legend>
+          <div className="stamp-row places">
+            {areas.map((a) => (
+              <Stamp
+                key={a}
+                label={a}
+                pressed={form.area === a}
+                onToggle={() => {
+                  setOtherArea(false)
+                  set({ area: form.area === a ? '' : a })
+                }}
+              />
+            ))}
+            <Stamp
+              label="Other…"
+              pressed={customArea}
+              onToggle={() => {
+                setOtherArea(!customArea)
+                set({ area: '' })
+              }}
+            />
+          </div>
+          {customArea && (
+            <label className="field">
+              <span>Area name</span>
+              <input
+                required
+                value={form.area}
+                onChange={(e) => set({ area: e.target.value })}
+                placeholder="e.g. San Lorenzo Village"
+                autoComplete="off"
+                autoFocus={otherArea}
+              />
+            </label>
+          )}
+        </fieldset>
 
         <fieldset>
           <legend>Social media and reels <span className="muted">(optional)</span></legend>

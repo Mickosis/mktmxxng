@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { findArea, nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
+import { findArea, MAKATI_AREAS, nameFromHandle, parseCaption, profileName } from '../src/prefill/parse'
 import { cleanLink, handleOf, isProfile, sameLink } from '../src/prefill/preview'
-import { publicName, shortName } from '../src/types'
+import { DEFAULT_AREAS, publicName, shortName } from '../src/types'
 import { cleanMapsLink, isMapsLink, placeFromShareText, placeFromUrl, placeIdOf, placePrefill } from '../src/prefill/maps'
 
 const opts = { tags: ['coffee', 'matcha', 'pastries', 'restaurant', 'brunch'], areas: ['Legazpi Village', 'Poblacion'] }
@@ -215,5 +215,13 @@ describe('findArea', () => {
     expect(findArea('Pio del Pilar', known)).toBe('Chino Roces')
     expect(findArea('Pasong Tamo', [])).toBe('Chino Roces')
     expect(findArea('Salcedo Village', known)).toBe('Salcedo')
+  })
+
+  it('knows how to spell every preset area', () => {
+    const named = MAKATI_AREAS.map(([name]) => name)
+    for (const a of DEFAULT_AREAS) expect(named).toContain(a)
+    expect(findArea('lunch at Greenbelt 5', DEFAULT_AREAS)).toBe('Ayala Center')
+    expect(findArea('Jupiter St, Bel-Air', DEFAULT_AREAS)).toBe('Jupiter / Bel-Air')
+    expect(findArea('Circuit Makati', DEFAULT_AREAS)).toBe('Circuit')
   })
 })

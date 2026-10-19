@@ -24,7 +24,7 @@ function toggle<T>(list: T[], v: T): T[] {
 }
 
 export function FilterPanel({ filters, onChange }: Props) {
-  const { tags, areas } = useCafes()
+  const { tags, usedAreas: areas } = useCafes()
   const { user } = useAuth()
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch })
 

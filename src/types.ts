@@ -11,6 +11,26 @@ export const WORK_LABELS: Record<WorkFlag, string> = {
 
 export const DEFAULT_TAGS = ['coffee', 'matcha', 'pastries', 'restaurant']
 
+/** Areas offered as one-tap picks, roughly from busiest to quietest. Ways of spelling them live in prefill/parse.ts. */
+export const DEFAULT_AREAS = [
+  'Legazpi Village',
+  'Salcedo Village',
+  'Poblacion',
+  'Rockwell',
+  'Ayala Center',
+  'Ayala Triangle',
+  'Chino Roces',
+  'Jupiter / Bel-Air',
+  'Kalayaan',
+  'Circuit',
+  'Century City',
+  'San Antonio Village',
+  'Magallanes',
+  'Guadalupe',
+  'Urdaneta Village',
+  'Dasmariñas Village',
+]
+
 export type Cafe = {
   id: string
   name: string

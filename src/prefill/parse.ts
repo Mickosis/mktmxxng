@@ -31,30 +31,30 @@ const WORK_WORDS: Record<WorkFlag, string[]> = {
 
 const PET_WORDS = ['pet friendly', 'pet-friendly', 'petfriendly', 'dog friendly', 'dog-friendly', 'dogfriendly', 'pets allowed', 'fur babies', 'furbabies']
 
-// Makati areas with the ways captions tend to spell them.
-const MAKATI_AREAS: [string, string[]][] = [
+// Makati areas with the ways captions tend to spell them. The first column matches DEFAULT_AREAS.
+export const MAKATI_AREAS: [string, string[]][] = [
   ['Legazpi Village', ['legazpi village', 'legaspi village', 'legazpi', 'legaspi']],
   ['Salcedo Village', ['salcedo village', 'salcedo']],
   ['Poblacion', ['poblacion', 'pobla']],
   ['Rockwell', ['rockwell', 'power plant mall', 'power plant']],
-  ['Greenbelt', ['greenbelt']],
-  ['Glorietta', ['glorietta']],
+  ['Ayala Center', ['ayala center', 'greenbelt', 'glorietta', 'landmark makati', 'ayala malls']],
   ['Ayala Triangle', ['ayala triangle']],
-  ['Circuit Makati', ['circuit makati', 'circuit']],
-  ['Century City', ['century city', 'century city mall']],
-  ['San Antonio Village', ['san antonio village', 'san antonio']],
-  ['Bel-Air', ['bel-air', 'bel air', 'belair']],
-  ['Urdaneta Village', ['urdaneta village', 'urdaneta']],
-  ['Magallanes', ['magallanes']],
-  ['Dasmariñas Village', ['dasmariñas village', 'dasmarinas village', 'dasmariñas', 'dasmarinas', 'dasma']],
-  ['San Lorenzo Village', ['san lorenzo village', 'san lorenzo']],
-  ['Guadalupe', ['guadalupe']],
   // Pio del Pilar is the barangay along the Chino Roces (Pasong Tamo) strip; people call it by the road.
   ['Chino Roces', ['chino roces', 'pasong tamo', 'pio del pilar']],
+  ['Jupiter / Bel-Air', ['jupiter', 'bel-air', 'bel air', 'belair']],
+  ['Kalayaan', ['kalayaan']],
+  ['Circuit', ['circuit makati', 'circuit']],
+  ['Century City', ['century city', 'century city mall']],
+  ['San Antonio Village', ['san antonio village', 'san antonio']],
+  ['Magallanes', ['magallanes']],
+  ['Guadalupe', ['guadalupe']],
+  ['Urdaneta Village', ['urdaneta village', 'urdaneta']],
+  ['Dasmariñas Village', ['dasmariñas village', 'dasmarinas village', 'dasmariñas', 'dasmarinas', 'dasma']],
+  ['San Lorenzo Village', ['san lorenzo village', 'san lorenzo']],
 ]
 
 // Areas named after a road. A village in the same text wins: "2129 Chino Roces Ave, Legaspi Village" is Legazpi Village.
-const CORRIDORS = new Set(['chino roces', 'pasong tamo'])
+const CORRIDORS = new Set(['chino roces', 'pasong tamo', 'kalayaan', 'jupiter / bel-air'])
 
 const PIN = /(?:📍|📌|🏠|\b(?:location|where|place|address)\s*[:：])\s*([^\n#|📍📌]+)/iu
 // The pin line ends at a double space or the end of a sentence, so the caption's next sentence isn't read as the name.
