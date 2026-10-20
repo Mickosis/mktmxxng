@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:rules": "npx firebase-tools emulators:exec --only firestore --project demo-mktmxxng \"vitest run tests\"",
-    "test": "vitest run tests/parse.test.ts"
+    "test": "vitest run tests/unit"
   },
   "dependencies": {
     "firebase": "^13.0.0",
