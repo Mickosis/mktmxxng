@@ -482,11 +482,6 @@ button.stamp {
   transition: background-color 120ms, color 120ms, border-color 120ms;
 }
 
-/* Place names keep their capitals. */
-.places .stamp {
-  text-transform: none;
-}
-
 button.stamp:hover {
   border-color: var(--ink);
 }
@@ -971,25 +966,73 @@ input.invite-url {
   border-radius: 4px;
 }
 
-.quick-add .btn-ink {
-  flex: 0 0 auto;
+.quick-paste {
+  width: 100%;
+  min-height: 48px;
 }
 
-.quick-status {
+/* What each pasted link filled in, printed like line items on a receipt. */
+.quick-log {
+  list-style: none;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1.5px dashed var(--rule);
+  display: grid;
+  gap: 16px;
+}
+
+.quick-entry {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-entry > .line {
+  font-weight: 600;
+}
+
+.quick-entry:is(.duplicate, .error, .needs-caption) > .line .line-val {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.quick-filled {
   display: flex;
   gap: 12px;
   align-items: flex-start;
 }
 
-.quick-status > div,
-.quick-caption {
-  display: grid;
-  gap: 8px;
+.quick-filled dl {
   flex: 1;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: var(--step--1);
+}
+
+.quick-filled dl > div {
+  display: grid;
+  grid-template-columns: 8ch 1fr;
+  gap: 8px;
+}
+
+.quick-filled dt {
+  color: var(--ink-soft);
+}
+
+.quick-filled dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .quick-caption {
   display: grid;
+  gap: 8px;
+}
+
+.quick-nudge {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1.5px dashed var(--rule);
 }
 
 .quick-thumb {

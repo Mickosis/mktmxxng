@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { Slip } from '../components/Shell'
 import { QuickAdd } from '../components/QuickAdd'
 import { Stamp } from '../components/Stamp'
 import { createCafe, updateCafe, useCafes } from '../data/cafes'
-import { mergePrefill } from '../prefill/merge'
+import { mergePrefill, type Filled } from '../prefill/merge'
 import type { Prefill } from '../prefill/parse'
 import { isHttpUrl, linkLabel, mapsLink, WORK_LABELS, type CafeInput, type WorkFlag } from '../types'
 
@@ -37,6 +37,9 @@ export function CafeForm() {
   return <CafeFormInner key={id ?? 'new'} id={id} />
 }
 
+// Select value for "Other…"; can't clash with a real area name.
+const OTHER = '\u0000other'
+
 function CafeFormInner({ id }: { id?: string }) {
   const { byId, tags, areas, cafes } = useCafes()
   const { user, isMember } = useAuth()
@@ -64,6 +67,10 @@ function CafeFormInner({ id }: { id?: string }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [otherArea, setOtherArea] = useState(false)
+  const latest = useRef(form)
+  useEffect(() => {
+    latest.current = form
+  }, [form])
 
   if (!isMember || !user) {
     return (
@@ -110,9 +117,12 @@ function CafeFormInner({ id }: { id?: string }) {
     setNewLink('')
   }
 
-  function applyPrefill(p: Prefill): string[] {
-    setForm((f) => mergePrefill(f, p).next)
-    return mergePrefill(form, p).filled
+  function applyPrefill(p: Prefill): Filled[] {
+    // Pastes resolve after a wait, so merge into the latest form, not the one from when the paste began.
+    const { next, filled } = mergePrefill(latest.current, p)
+    latest.current = next
+    setForm(next)
+    return filled
   }
 
   function attachLink(url: string, replaces?: string) {
@@ -188,43 +198,37 @@ function CafeFormInner({ id }: { id?: string }) {
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend>Area</legend>
-          <div className="stamp-row places">
+        <label className="field">
+          <span>Area</span>
+          <select
+            required
+            value={customArea ? OTHER : form.area}
+            onChange={(e) => {
+              const other = e.target.value === OTHER
+              setOtherArea(other)
+              set({ area: other ? '' : e.target.value })
+            }}
+          >
+            <option value="" disabled>Pick an area</option>
             {areas.map((a) => (
-              <Stamp
-                key={a}
-                label={a}
-                pressed={form.area === a}
-                onToggle={() => {
-                  setOtherArea(false)
-                  set({ area: form.area === a ? '' : a })
-                }}
-              />
+              <option key={a} value={a}>{a}</option>
             ))}
-            <Stamp
-              label="Other…"
-              pressed={customArea}
-              onToggle={() => {
-                setOtherArea(!customArea)
-                set({ area: '' })
-              }}
+            <option value={OTHER}>Other…</option>
+          </select>
+        </label>
+        {customArea && (
+          <label className="field">
+            <span>Area name</span>
+            <input
+              required
+              value={form.area}
+              onChange={(e) => set({ area: e.target.value })}
+              placeholder="e.g. San Lorenzo Village"
+              autoComplete="off"
+              autoFocus={otherArea}
             />
-          </div>
-          {customArea && (
-            <label className="field">
-              <span>Area name</span>
-              <input
-                required
-                value={form.area}
-                onChange={(e) => set({ area: e.target.value })}
-                placeholder="e.g. San Lorenzo Village"
-                autoComplete="off"
-                autoFocus={otherArea}
-              />
-            </label>
-          )}
-        </fieldset>
+          </label>
+        )}
 
         <fieldset>
           <legend>Social media and reels <span className="muted">(optional)</span></legend>
