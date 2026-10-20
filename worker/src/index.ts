@@ -179,32 +179,70 @@ function tiktokPost(url: URL): { id: string; handle: string; photo: boolean } | 
   return { id: m[2], handle: url.pathname.match(/^\/@([^/]*)\//)?.[1] ?? '', photo: m[1] === 'photo' }
 }
 
+type TikTokItem = {
+  desc?: string
+  /** The location tag, when the poster added one. */
+  poi?: { name?: string; address?: string }
+  author?: { uniqueId?: string; nickname?: string }
+  video?: { cover?: string }
+  imagePost?: { cover?: { imageURL?: { urlList?: string[] } } }
+}
+type TikTokUser = { uniqueId?: string; nickname?: string; signature?: string }
+
+function scriptJson<T>(html: string, id: string): T | null {
+  const raw = html.match(new RegExp(`<script id="${id}"[^>]*>([\\s\\S]*?)</script>`))?.[1]
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+/** The post or profile a TikTok page is for. TikTok serves a few page layouts, each keeping it somewhere else. */
+function tiktokPageData(html: string): { item?: TikTokItem; user?: TikTokUser } {
+  const scope = scriptJson<{ __DEFAULT_SCOPE__?: Record<string, { itemInfo?: { itemStruct?: TikTokItem }; userInfo?: { user?: TikTokUser } }> }>(
+    html,
+    '__UNIVERSAL_DATA_FOR_REHYDRATION__',
+  )?.__DEFAULT_SCOPE__
+  const api = scriptJson<{ videoDetail?: { itemInfo?: { itemStruct?: TikTokItem } } }>(html, 'api-data')
+  return {
+    // Desktop: webapp.video-detail; phone: webapp.reflow.video.detail, or a separate api-data script.
+    item:
+      scope?.['webapp.video-detail']?.itemInfo?.itemStruct ??
+      scope?.['webapp.reflow.video.detail']?.itemInfo?.itemStruct ??
+      api?.videoDetail?.itemInfo?.itemStruct,
+    user: scope?.['webapp.user-detail']?.userInfo?.user,
+  }
+}
+
 async function tiktok(url: URL): Promise<Preview> {
   const isShort = url.hostname !== 'www.tiktok.com' && url.hostname !== 'tiktok.com'
   const full = isShort || url.pathname.startsWith('/t/') ? await resolve(url) : url
   const empty = blank('tiktok', full)
   const post = tiktokPost(full)
-  // oEmbed turns down /photo/ (slideshow) links and empty or odd handles, but takes any post id
-  // as /@<anything>/video/<id>. Profile links go as they are: the display name, no bio.
-  const asked = post ? `https://www.tiktok.com/@${post.handle || '_'}/video/${post.id}` : full.toString()
-  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(asked)}`
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(endpoint, { headers: { 'User-Agent': BROWSER_UA } })
-    // Under load it can also answer 200 with a plain-text "overload-protect triggered".
-    const data = res.ok
-      ? ((await res.json().catch(() => null)) as { title?: string; author_name?: string; author_url?: string; thumbnail_url?: string } | null)
-      : null
-    if (data) {
-      const handle = data.author_url?.split('/@')[1]
-      const author = handle ? `@${handle}` : data.author_name || null
-      if (empty.kind === 'profile') return { ...empty, author, name: data.author_name || null }
+  // TikTok's oEmbed stopped returning captions and authors in October 2026, so read the web page.
+  // It answers a phone browser with the post (videos and photo slideshows alike, by id under any
+  // handle) or the profile, bio included.
+  const page = post ? `https://www.tiktok.com/@${post.handle || '_'}/video/${post.id}` : full.toString()
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(page, { headers: { 'User-Agent': BROWSER_UA, 'Accept-Language': 'en-US,en;q=0.9' } })
+    const { item, user } = res.ok ? tiktokPageData(await res.text()) : {}
+    if (empty.kind === 'profile') {
+      if (user?.nickname || user?.signature) {
+        return { ...empty, author: user.uniqueId ? `@${user.uniqueId}` : null, name: user.nickname || null, caption: user.signature || null }
+      }
+    } else if (item?.desc != null && item.author) {
+      const handle = item.author.uniqueId
       // Save a link that opens the post directly, with the account filled back in.
       const link = post && handle ? `https://www.tiktok.com/@${handle}/${post.photo ? 'photo' : 'video'}/${post.id}` : empty.url
-      return { ...empty, url: link, caption: data.title || null, author, thumbnail: data.thumbnail_url || null }
+      const thumbnail = item.video?.cover || item.imagePost?.cover?.imageURL?.urlList?.[0] || null
+      // A location tag is the surest name for the place; put it first as a pin line for the caption reader.
+      const tagged = item.poi?.name ? `📍 ${[item.poi.name, item.poi.address].filter(Boolean).join(', ')}\n` : ''
+      return { ...empty, url: link, caption: tagged + item.desc || null, author: handle ? `@${handle}` : null, name: null, thumbnail }
     }
-    // TikTok sheds load with 503 "overload-protect"; a short wait usually clears it.
-    if (!res.ok && res.status !== 503) break
-    await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+    if (res.ok && (item || user)) break
+    await new Promise((r) => setTimeout(r, 600))
   }
   return empty
 }
@@ -315,8 +353,8 @@ export default {
     if (!platform) return json({ error: 'Only TikTok, Instagram and Facebook links are supported.' }, 400, origin)
 
     const cache = caches.default
-    // v2: responses gained kind and name.
-    const key = new Request(`https://preview.cache/v2/${encodeURIComponent(target.toString())}`)
+    // v3: TikTok profiles gained bios.
+    const key = new Request(`https://preview.cache/v3/${encodeURIComponent(target.toString())}`)
     const hit = await cache.match(key)
     if (hit) {
       const body = await hit.text()
